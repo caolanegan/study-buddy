@@ -36,8 +36,8 @@ export function shareInfo(ctx: Ctx): ShareInfo {
 // tiny pixel icons for the card (no emoji fonts needed)
 const ICONS: Record<string, { pal: Record<string, string>; rows: string[] }> = {
   clock: {
-    pal: { o: '#3a3340', w: '#f7f1e3', r: '#c0392b' },
-    rows: ['..ooooo..', '.owwwwwo.', 'owwwowwwo', 'owwwowwwo', 'owwwoooro', 'owwwwwwwo', 'owwwwwwwo', '.owwwwwo.', '..ooooo..'],
+    pal: { o: '#b9804f', g: '#d8e4ef', s: '#f2b134' },
+    rows: ['ooooooooo', '.ggggggg.', '.gsssssg.', '..gsssg..', '...gsg...', '....s....', '...gsg...', '..ggsgg..', '.ggssssg.', '.gsssssg.', 'ooooooooo'],
   },
   flame: {
     pal: { r: '#e0564a', o: '#f2a134', y: '#fbe08a' },
@@ -126,7 +126,7 @@ export function buildShareCard(ctx: Ctx): HTMLCanvasElement {
   let x = PAD;
   const sy = fy + 104;
   const stat = (icon: string, text: string, color: string) => {
-    drawIcon(g, icon, x, sy - 30, 4);
+    drawIcon(g, icon, x, sy - 32, 4);
     x += 46;
     g.fillStyle = color;
     g.fillText(text, x, sy);

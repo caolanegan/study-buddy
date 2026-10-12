@@ -249,7 +249,7 @@ export class WeatherFx {
       }
     }
     if (c.weather === 'storm' || c.weather === 'rain') {
-      const a = c.weather === 'storm' ? 0.9 : 0.35;
+      const a = c.weather === 'storm' ? 0.6 : 0.2;
       if (!this.steam) this.steam = makeSteam();
       g.globalAlpha = a;
       g.drawImage(this.steam, 0, 0);
@@ -270,7 +270,7 @@ export class WeatherFx {
   }
 }
 
-function makeBand() {
+export function makeBand() {
   const w = WW * 2;
   const cv = makeCanvas(w, 9);
   const g = cv.getContext('2d')!;
@@ -309,43 +309,49 @@ function makeSteam() {
   return cv;
 }
 
-/** Frost grows from the corners (more at the bottom) with crystalline edges and a few fern strokes. */
+/** Frost grows from the corners (more along the bottom) with feathery crystalline edges and fern strokes. */
 function makeFrost(level: number) {
   const cv = makeCanvas(WW, WH);
   const g = cv.getContext('2d')!;
   const corners = [
-    [0, 0, 1.2],
-    [WW - 1, 0, 1.2],
-    [0, WH - 1, 0.8],
-    [WW - 1, WH - 1, 0.8],
+    [0, 0, 1.25],
+    [WW - 1, 0, 1.25],
+    [0, WH - 1, 0.85],
+    [WW - 1, WH - 1, 0.85],
   ];
-  const reach = 6 + level * 20;
+  const reach = 4 + level * 13;
   for (let y = 0; y < WH; y++)
     for (let x = 0; x < WW; x++) {
       let d = 99;
       for (const [cx, cy, k] of corners) d = Math.min(d, Math.hypot(x - cx, y - cy) * k);
-      d = Math.min(d, (WH - 1 - y) * 2.2 + 4);
-      d += (h01(x * 73 + y * 1031) - 0.5) * 7 + Math.sin(x * 0.9 + y * 1.3) * 2;
+      d = Math.min(d, (WH - 1 - y) * 3 + 3);
+      // low-frequency wobble so the edge is lacy rather than speckled
+      d += Math.sin(x * 0.8 + y * 0.35) * 1.4 + Math.sin(x * 0.27 - y * 0.9) * 1.4;
       if (d > reach) continue;
       const k = d / reach;
-      const a = 0.75 - k * 0.5;
-      g.fillStyle = k > 0.8 ? `rgba(235,245,255,${a})` : `rgba(214,232,248,${a})`;
+      const edge = k > 0.84;
+      const a = edge ? 0.42 : 0.08 + (1 - k) * 0.3;
+      g.fillStyle = edge ? `rgba(240,248,255,${a})` : `rgba(206,226,246,${a})`;
       g.fillRect(x, y, 1, 1);
     }
-  // fern-like strokes
+  // fern-like strokes reaching in from the corners
   const r = rng(12);
   for (const [cx, cy] of corners) {
-    for (let s = 0; s < 3; s++) {
+    for (let s = 0; s < 1; s++) {
       let x = cx;
       let y = cy;
-      const ang = Math.atan2(WH / 2 - cy, WW / 2 - cx) + (r() - 0.5) * 1.4;
-      const len = reach * (0.6 + r() * 0.5);
+      const ang = Math.atan2(WH / 2 - cy, WW / 2 - cx) + (r() - 0.5) * 1.3;
+      const len = reach * (0.7 + r() * 0.5);
       for (let i = 0; i < len; i++) {
-        x += Math.cos(ang) + (r() - 0.5) * 0.6;
-        y += Math.sin(ang) + (r() - 0.5) * 0.6;
-        g.fillStyle = 'rgba(250,253,255,0.7)';
+        x += Math.cos(ang);
+        y += Math.sin(ang);
+        g.fillStyle = 'rgba(248,252,255,0.6)';
         g.fillRect(Math.round(x), Math.round(y), 1, 1);
-        if (i % 3 === 0) g.fillRect(Math.round(x + Math.sin(ang) * 1.5), Math.round(y - Math.cos(ang) * 1.5), 1, 1);
+        if (i % 3 === 1 && i > 2) {
+          g.fillStyle = 'rgba(248,252,255,0.35)';
+          g.fillRect(Math.round(x + Math.sin(ang) * 1.5), Math.round(y - Math.cos(ang) * 1.5), 1, 1);
+          g.fillRect(Math.round(x - Math.sin(ang) * 1.5), Math.round(y + Math.cos(ang) * 1.5), 1, 1);
+        }
       }
     }
   }

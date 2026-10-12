@@ -2211,10 +2211,12 @@ const ghostPlush: ItemArt[] = [
 // ───────────────────────── more pets ─────────────────────────
 
 // ── hamster in a cage at the right end of the desk ──
-const CAGE = { x: 200, w: 20, h: 14 };
-const HAM_PAL = { o: '#d08a3a', w: '#f6ecd9', k: '#1d1d24', p: '#f0a0a0' };
-const HAM = [new Sprite(['.oop.', 'oookp', 'w.w.w'], HAM_PAL), new Sprite(['.oop.', 'oookp', '.w.w.'], HAM_PAL)];
-const HAM_EAT = new Sprite(['.oop.', 'ooooo', 'wwokp'], HAM_PAL);
+const CAGE = { x: 200, w: 20, h: 16 };
+const HAM_PAL = { o: '#d08a3a', d: '#b06f2a', w: '#f6ecd9', k: '#1d1d24', p: '#f0a0a0' };
+const HAM_TOP = ['...dp.', '.oooko', 'ooowwp'];
+const HAM = [new Sprite([...HAM_TOP, '.w..w.'], HAM_PAL), new Sprite([...HAM_TOP, 'w...w.'], HAM_PAL), new Sprite([...HAM_TOP, '..ww..'], HAM_PAL)];
+const HAM_EAT = [new Sprite(['......', '.dp...', 'ooko..', 'ooowwp'], HAM_PAL), new Sprite(['......', '.dp...', 'oooko.', 'oowwop'], HAM_PAL)];
+const HAM_SLEEP = new Sprite(['..dd..', '.oooo.', 'oooodo', 'wwwwww'].map((r, i) => (i === 3 ? '.oooo.' : r)), HAM_PAL);
 const HAM_T = 40;
 const hamster: ItemArt[] = [
   {
@@ -2224,58 +2226,54 @@ const hamster: ItemArt[] = [
       const { x, w, h } = CAGE;
       const y = DESK.top - lift - h;
       const c = t % HAM_T;
+      const floor = y + 11; // inside floor (top of the bedding layer)
       // back panel + roof
-      p.rect(x + 1, y + 1, w - 2, 9, '#e3edf0');
+      p.rect(x + 1, y + 1, w - 2, 11, '#e3edf0');
       p.rect(x + 2, y, w - 4, 1, '#9a97a6');
-      // bedding pile, food bowl, water bottle
-      p.rect(x + 2, y + 8, 7, 2, '#f3e2b0');
-      p.rect(x + 3, y + 7, 5, 1, '#f3e2b0');
-      for (let i = 0; i < 4; i++) p.px(x + 3 + i * 2, y + 8 + (i % 2), '#d9c38a');
-      p.rect(x + 9, y + 9, 3, 1, '#3f86c7');
-      p.px(x + 10, y + 8, '#8a5a35');
-      p.rect(x + 2, y + 2, 2, 4, '#9fd3ef');
+      // bedding, food bowl, water bottle
+      p.rect(x + 1, floor, w - 2, 1, '#f3e2b0');
+      p.rect(x + 2, floor - 2, 7, 2, '#f3e2b0');
+      p.rect(x + 3, floor - 3, 5, 1, '#f3e2b0');
+      for (let i = 0; i < 6; i++) p.px(x + 2 + i * 3, floor - (i < 3 ? 1 + (i % 2) : 0), '#d9c38a');
+      p.rect(x + 9, floor - 1, 3, 1, '#3f86c7');
+      p.px(x + 10, floor - 2, '#8a5a35');
+      p.rect(x + 2, y + 2, 2, 5, '#9fd3ef');
       p.px(x + 2, y + 2, '#e9f6fc');
-      p.px(x + 3, y + 6, '#9a94a3');
+      p.px(x + 3, y + 7, '#9a94a3');
       // wheel: spins while running, coasts otherwise
       const wx = x + 14;
-      const wy = y + 5;
+      const wy = y + 6;
       const running = c < 12;
-      const ang = running ? t * 9 : 12 * 9 + Math.min(c - 12, 2) * 2;
-      p.line(wx, wy, wx - 2, y + 9, '#9a94a3');
-      p.line(wx, wy, wx + 2, y + 9, '#9a94a3');
-      for (let b = 0; b < 4; b++) {
+      const ang = running ? t * 8 : 12 * 8 + Math.min(c - 12, 2) * 1.5;
+      p.line(wx, wy, wx - 2, floor, '#9a94a3');
+      p.line(wx, wy, wx + 2, floor, '#9a94a3');
+      for (let b = 0; b < 2; b++) {
         const a = ang + b * 1.571;
-        p.line(wx, wy, wx + Math.round(Math.cos(a) * 3), wy + Math.round(Math.sin(a) * 3), '#f0b8b4');
+        p.line(wx - Math.round(Math.cos(a) * 3.5), wy - Math.round(Math.sin(a) * 3.5), wx + Math.round(Math.cos(a) * 3.5), wy + Math.round(Math.sin(a) * 3.5), '#cfccd6');
       }
-      for (let a = 0; a < Math.PI * 2; a += 0.25) p.px(wx + Math.round(Math.cos(a) * 3.6), wy + Math.round(Math.sin(a) * 3.6), '#d9534f');
+      for (let a = 0; a < Math.PI * 2; a += 0.2) p.px(wx + Math.round(Math.cos(a) * 4.5), wy + Math.round(Math.sin(a) * 4.5), '#d9534f');
       p.px(wx, wy, '#9a94a3');
       // hamster: wheel → bowl → bed → wheel
-      const W = { x: wx - 2, y: wy + 1 };
-      const B = { x: x + 9, y: y + 7 };
-      const N = { x: x + 3, y: y + 6 };
+      const W = { x: wx - 3, y: wy };
+      const B = { x: x + 10, y: floor - 4 };
+      const N = { x: x + 3, y: floor - 6 };
       const walk = (a: Pt, b: Pt, k: number, left: boolean) => drawSprite(p, HAM[Math.floor(t * 10) % 2], Math.round(lerp(a.x, b.x, k)), Math.round(lerp(a.y, b.y, k)), left);
-      if (running) drawSprite(p, HAM[Math.floor(t * 14) % 2], W.x, W.y);
+      if (running) drawSprite(p, HAM[Math.floor(t * 14) % 3], W.x, W.y);
       else if (c < 14) walk(W, B, (c - 12) / 2, true);
-      else if (c < 20) {
-        drawSprite(p, HAM_EAT, B.x, B.y, true);
-        if (Math.floor(t * 6) % 2) p.px(B.x + 4, B.y + 1, HAM_PAL.o); // munching, cheek puffs
-      } else if (c < 22) walk(B, N, (c - 20) / 2, true);
+      else if (c < 20) drawSprite(p, HAM_EAT[Math.floor(t * 5) % 2], B.x - 1, B.y, true);
+      else if (c < 22) walk(B, N, (c - 20) / 2, true);
       else if (c < 36) {
-        // curled up asleep in the bedding
-        const br = Math.sin(t * 2) > 0 ? 1 : 0;
-        p.rect(N.x, N.y + 1, 4, 2, HAM_PAL.o);
-        p.rect(N.x + 1, N.y + 1 - br, 2, 1, HAM_PAL.o);
-        p.px(N.x + 3, N.y + 1, HAM_PAL.p);
-        p.px(N.x + 1, N.y + 2, HAM_PAL.w);
-        if (Math.floor(t / 1.5) % 2 === 0) p.px(N.x + 5, N.y - 2 - (Math.floor(t * 2) % 2), '#8a8aa0');
+        // curled up asleep in the bedding, breathing
+        drawSprite(p, HAM_SLEEP, N.x, N.y + 2 + (Math.sin(t * 2) > 0 ? 0 : 1));
+        if (Math.floor(t / 1.5) % 2 === 0) p.px(N.x + 6, N.y - (Math.floor(t * 2) % 2), '#8a8aa0');
       } else walk(N, W, (c - 36) / 4, false);
       // bars, blue tray underneath
-      for (let bx = x + 5; bx < x + w - 2; bx += 4) p.rect(bx, y + 1, 1, 9, 'rgba(130,130,148,0.55)');
-      p.rect(x + 1, y + 1, 1, 9, '#9a97a6');
-      p.rect(x + w - 2, y + 1, 1, 9, '#9a97a6');
-      p.rect(x, y + 10, w, 4, '#3f86c7');
-      p.rect(x, y + 10, w, 1, '#5ea2de');
-      p.rect(x, y + 13, w, 1, '#2f6aa0');
+      for (let bx = x + 5; bx < x + w - 2; bx += 4) p.rect(bx, y + 1, 1, 11, 'rgba(130,130,148,0.5)');
+      p.rect(x + 1, y + 1, 1, 11, '#9a97a6');
+      p.rect(x + w - 2, y + 1, 1, 11, '#9a97a6');
+      p.rect(x, y + 12, w, 4, '#3f86c7');
+      p.rect(x, y + 12, w, 1, '#5ea2de');
+      p.rect(x, y + 15, w, 1, '#2f6aa0');
     },
   },
 ];
@@ -2337,11 +2335,12 @@ function drawVacuum(p: Painter, x: number, y: number, dir: number, t: number, mo
   x = Math.round(x);
   y = Math.round(y);
   p.rect(x - 5, y + 1, 11, 1, 'rgba(0,0,0,0.18)');
-  p.ellipse(x, y - 1, 6, 2, '#26262c');
-  p.ellipse(x, y - 3, 6, 2, '#44444f');
-  p.rect(x - 3, y - 4, 6, 1, '#5a5a68');
-  p.rect(dir > 0 ? x + 4 : x - 6, y - 2, 2, 2, '#1d1d24'); // bumper
-  p.rect(x - 1, y - 4, 2, 1, '#2a2a33');
+  p.ellipse(x, y - 1, 6, 2, '#8a8796');
+  p.ellipse(x, y - 3, 6, 2, '#e9e6ee');
+  p.rect(x - 3, y - 4, 6, 1, '#ffffff');
+  p.rect(x - 2, y - 3, 4, 1, '#3a3a46'); // lidar cap
+  p.rect(dir > 0 ? x + 4 : x - 6, y - 2, 2, 2, '#55556a'); // bumper
+  p.rect(x - 5, y, 10, 1, '#6a6776');
   p.px(x + dir * 2 - (dir > 0 ? 0 : 1), y - 3, led);
   if (moving) p.px(x + dir * 5 + (Math.floor(t * 12) % 2 ? 0 : dir), y, '#9a94a3'); // side brush
 }

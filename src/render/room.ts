@@ -413,7 +413,7 @@ export class RoomRenderer {
   }
 
   private plantBox(s: RenderScene) {
-    const top = [104, 98, 96, 91, 83, 82][plantStage(s.studiedHours ?? 0)];
+    const top = [104, 98, 96, 92, 81, 80][plantStage(s.studiedHours ?? 0)];
     return { x: 66, y: top, w: 20, h: 125 - top };
   }
 
@@ -1134,63 +1134,96 @@ function drawClock(p: Painter, cx: number, cy: number, t: number, spin = 0) {
 }
 
 const LEAF = ['#3f8a3f', '#4f9e48', '#5aa64f', '#6cbf5e'];
-type Leaf = [number, number, number, number, number]; // base dx, base dy, tip dx, tip dy, colour index
-const STAGE_LEAVES: Leaf[][] = [
-  // 0 sprout
-  [[0, 0, 0, -3, 2]],
-  // 1 seedling
-  [[0, 0, -3, -5, 1], [0, 0, 3, -6, 2], [0, 0, 0, -8, 3]],
-  // 2 leafy (the original starter plant)
-  [[0, 0, -4, -8, 1], [0, 0, 3, -11, 2], [0, 0, 8, -7, 1], [0, 0, 1, -5, 3], [0, 0, -2, -12, 3]],
-  // 3 bushy
-  [[0, 0, -7, -6, 0], [0, 0, 7, -6, 0], [0, 0, -6, -12, 1], [0, 0, 6, -11, 1], [0, 0, -3, -16, 2], [0, 0, 3, -17, 2], [0, 0, 0, -13, 3], [0, 0, -4, -9, 3], [0, 0, 4, -8, 2], [0, 0, -8, -2, 1], [0, 0, 8, -2, 1]],
-  // 4 tall with a bud/flower (leaves along a central stem)
-  [[0, -3, -6, -6, 0], [0, -6, 6, -9, 1], [0, -10, -6, -13, 1], [0, -14, 6, -17, 2], [0, -18, -5, -21, 2], [0, -21, 5, -24, 3], [0, 0, -7, -2, 0], [0, 0, 7, -3, 1]],
-  // 5 blooming
-  [[0, -3, -7, -6, 0], [0, -6, 7, -9, 1], [0, -10, -7, -13, 1], [0, -13, 7, -16, 2], [0, -17, -6, -20, 2], [0, -20, 6, -23, 3], [0, 0, -8, -2, 0], [0, 0, 8, -3, 1], [0, -8, -4, -10, 3], [0, -12, 4, -14, 3]],
+const LEAF_DARK = '#2f6b33';
+const STEM = '#3f7a34';
+type Leaf = [number, number, number]; // tip dx, tip dy, colour index
+const SMALL_LEAVES: Leaf[][] = [
+  [[0, -3, 2]],
+  [[-3, -5, 1], [3, -6, 2], [0, -8, 3]],
+  // the original starter plant
+  [[-4, -8, 1], [3, -11, 2], [8, -7, 1], [1, -5, 3], [-2, -12, 3]],
 ];
-const STEM_TOP = [0, 0, 0, 0, -26, -27];
-const FLOWERS: [number, number, string][][] = [[], [], [], [], [[0, -27, '#f19cbf']], [[0, -28, '#f19cbf'], [-7, -21, '#f2d034'], [7, -24, '#e9e4f2'], [-8, -14, '#f19cbf']]];
+// bushy: leaf tufts around a leafy mass
+const BUSH_TUFTS: Leaf[] = [[-9, -4, 1], [9, -5, 1], [-8, -10, 2], [8, -11, 2], [-4, -15, 2], [3, -16, 3], [0, -13, 3], [-5, -8, 3], [5, -8, 3]];
+// tall: leaves along the stem: height, side, colour
+const STEM_LEAVES: [number, number, number][] = [[-4, -1, 0], [-7, 1, 1], [-11, -1, 1], [-14, 1, 2], [-18, -1, 2], [-21, 1, 3]];
+const FLOWERS: [number, number, string][][] = [[], [], [], [], [[0, -27, '#f19cbf']], [[0, -28, '#f19cbf'], [-7, -21, '#f2d034'], [7, -24, '#ece6f7'], [-8, -13, '#f19cbf'], [6, -15, '#f2d034']]];
+
+/** A plump pixel leaf at (x, y) pointing left (-1) or right (1). */
+function leafAt(p: Painter, x: number, y: number, dir: number, c: string) {
+  p.rect(dir > 0 ? x : x - 3, y, 4, 2, c);
+  p.px(x + dir * 4, y, c);
+  p.px(x + dir * (dir > 0 ? 0 : 0), y + 1, LEAF_DARK);
+  p.px(x + dir * 2, y, LEAF[3]);
+}
+
+function flowerAt(p: Painter, x: number, y: number, c: string) {
+  p.rect(x - 1, y - 2, 3, 1, c);
+  p.rect(x - 2, y - 1, 5, 3, c);
+  p.rect(x - 1, y + 2, 3, 1, c);
+  p.px(x, y, '#f2b134');
+  p.px(x - 1, y - 1, '#ffffff');
+}
 
 /** The starter plant (always there): grows with total hours studied; rustles when tapped. */
 function drawStarterPlant(p: Painter, stage: number, t: number, tapK: number) {
   const { x: X, y: Y } = PLANT;
-  const big = stage >= 4;
-  // pot (a bigger one once it's tall)
-  p.rect(X - 6 - (big ? 1 : 0), Y + 1, 12 + (big ? 2 : 0), 12, '#c26a3d');
-  p.rect(X - 7 - (big ? 1 : 0), Y, 14 + (big ? 2 : 0), 2, '#a85a32');
-  p.rect(X - 5, Y + 2, 1, 10, '#d17c4c');
-  p.rect(X - 6, Y + 1, 12, 1, '#4a3020'); // soil
+  const big = stage >= 3 ? 1 : 0;
+  // pot (a bigger one once it's grown)
+  p.rect(X - 6 - big, Y + 1, 12 + big * 2, 12, '#c26a3d');
+  p.rect(X - 7 - big, Y, 14 + big * 2, 2, '#a85a32');
+  p.rect(X - 5 - big, Y + 2, 1, 10, '#d17c4c');
+  p.rect(X + 4 + big, Y + 2, 1, 10, '#ad5c33');
+  p.rect(X - 6 - big, Y + 1, 12 + big * 2, 1, '#4a3020'); // soil
   const rustle = tapK >= 0 && tapK < 1.2 ? Math.sin(tapK * 30) * 2 * (1 - tapK / 1.2) : 0;
   const breeze = Math.sin(t * 0.7) > 0.85 ? 1 : 0;
   const sway = (dy: number) => Math.round((rustle + breeze) * Math.min(1, -dy / 10));
-  if (STEM_TOP[stage]) p.line(X, Y, X + sway(STEM_TOP[stage]), Y + STEM_TOP[stage], '#4f8a3a');
-  for (const [bx, by, tx, ty, ci] of STAGE_LEAVES[stage]) {
-    const c = LEAF[ci];
-    const sx = X + bx + sway(by);
-    const ex = X + tx + sway(ty);
-    p.line(sx, Y + by, ex, Y + ty, c);
-    if (stage === 0) {
-      p.rect(ex - 2, Y + ty, 2, 1, LEAF[3]);
-      p.rect(ex + 1, Y + ty - 1, 2, 1, LEAF[2]);
-    } else if (stage >= 3) {
-      p.rect(ex - 1, Y + ty - 1, 4, 2, c);
-      p.px(ex, Y + ty - 1, LEAF[Math.min(3, ci + 1)]);
-    } else p.rect(ex - 1, Y + ty - 1, 3, 2, c);
+  if (stage <= 2) {
+    for (const [tx, ty, ci] of SMALL_LEAVES[stage]) {
+      const c = LEAF[ci];
+      const ex = X + tx + sway(ty);
+      p.line(X, Y, ex, Y + ty, c);
+      if (stage === 0) {
+        p.rect(ex - 2, Y + ty, 2, 1, LEAF[3]);
+        p.rect(ex + 1, Y + ty - 1, 2, 1, LEAF[2]);
+      } else p.rect(ex - 1, Y + ty - 1, 3, 2, c);
+    }
+    return;
   }
-  for (const [fx, fy, fc] of FLOWERS[stage]) {
-    const x = X + fx + sway(fy);
-    const y = Y + fy;
-    p.px(x - 1, y, fc);
-    p.px(x + 1, y, fc);
-    p.px(x, y - 1, fc);
-    p.px(x, y + 1, fc);
-    p.px(x, y, '#f2b134');
+  if (stage === 3) {
+    const s1 = sway(-8);
+    const s2 = sway(-14);
+    p.ellipse(X, Y - 6, 9, 6, LEAF[0]);
+    p.ellipse(X - 1 + s1, Y - 8, 7, 5, LEAF[1]);
+    p.ellipse(X + 1 + s2, Y - 11, 5, 3, LEAF[2]);
+    for (const [tx, ty, ci] of BUSH_TUFTS) {
+      const x = X + tx + sway(ty);
+      p.rect(x - 1, Y + ty - 1, 3, 2, LEAF[ci]);
+      p.px(x, Y + ty - 1, LEAF[Math.min(3, ci + 1)]);
+    }
+    for (const [dx, dy] of [[-4, -4], [3, -6], [-1, -9], [5, -3], [-6, -7]]) p.px(X + dx + sway(dy), Y + dy, LEAF_DARK);
+    return;
   }
+  // tall (4) / blooming (5): a sturdy stem with leaves, a leafy base and flowers
+  const top = stage === 4 ? -26 : -27;
+  p.ellipse(X, Y - 2, 7, 3, LEAF[0]);
+  for (let i = 0; i > top; i--) {
+    const x = X + sway(i);
+    p.rect(x, Y + i, 2, 1, STEM);
+  }
+  for (const [h, side, ci] of STEM_LEAVES) leafAt(p, X + sway(h) + (side > 0 ? 2 : -1), Y + h, side, LEAF[ci]);
+  if (stage === 5) {
+    // side branches carrying more blooms
+    p.line(X + sway(-12), Y - 10, X - 7 + sway(-21), Y - 20, STEM);
+    p.line(X + 1 + sway(-14), Y - 13, X + 7 + sway(-24), Y - 23, STEM);
+    leafAt(p, X - 5 + sway(-17), Y - 17, -1, LEAF[2]);
+    leafAt(p, X + 6 + sway(-19), Y - 19, 1, LEAF[3]);
+  }
+  for (const [fx, fy, fc] of FLOWERS[stage]) flowerAt(p, X + fx + sway(fy) + (fx === 0 ? 1 : 0), Y + fy, fc);
 }
 
 /** Seasonal knick-knack on the right end of the windowsill (sim season). */
-const SILL = { x: 72, y: WY + WH + 2 };
+const SILL = { x: 72, y: WY + WH + 4 };
 function drawSillDecor(p: Painter, season: number) {
   const { x, y } = SILL;
   if (season === 0) {

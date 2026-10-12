@@ -332,10 +332,17 @@
 }
 .cz-views { display: grid; grid-template-columns: 1fr; gap: 8px; }
 .cz-viewcard { flex-direction: row; align-items: center; gap: 12px; padding: 7px 10px 7px 7px; text-align: left; width: 100%; }
-.cz-view-thumb { width: 72px; height: 62px; flex: none; border-radius: 8px; }
+.cz-view-thumb { width: 84px; height: 72px; flex: none; border-radius: 8px; }
 .cz-view-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .cz-view-text b { font-size: 15px; }
-@media (min-width: 480px) { .cz-views { grid-template-columns: 1fr 1fr; } }
+.cz-controls { container-type: inline-size; }
+@container (min-width: 540px) { .cz-views { grid-template-columns: 1fr 1fr; } }
+.cz-tip { display: none; }
+@media (min-width: 760px) {
+  .cz-tip { display: flex; gap: 10px; align-items: flex-start; margin-top: 14px; padding: 12px 14px; background: var(--panel2); border-radius: 12px; font-size: 13px; color: var(--muted); }
+  .cz-tip b { color: var(--ink); }
+  .cz-tip > span:first-child { font-size: 20px; line-height: 1; }
+}
 
 /* onboarding extras */
 .ob-sub { margin: 8px 0 2px; font-size: 14px; }
@@ -395,7 +402,9 @@ html.zen-on, html.zen-on body { overflow: hidden; }
 }
 .zen-root .stage { border: 0; border-radius: 0; background: #000; }
 .zen-root .sim-chip { display: none; }
-.zen-root .stage-btns .stage-btn:first-child { display: none; }
+.zen-root .stage-btns { display: none; }
+.zen-root .bubble { font-size: clamp(14px, 1.3vw, 18px); max-width: min(320px, 50%); }
+.zen-root .float-fx { font-size: clamp(16px, 1.6vw, 24px); }
 @media (min-width: 700px) and (min-height: 500px) {
   .zen-slot { width: min(calc(100vw - 64px), calc((100dvh - 64px) * 1.6)); }
   .zen-slot, .zen-root .stage { border-radius: 18px; }
@@ -444,4 +453,13 @@ html.zen-on, html.zen-on body { overflow: hidden; }
   .zen-timer { font-size: 22px; }
   .zen-sub { display: none; }
   .zen-btn { min-height: 44px; }
+}
+
+/* toasts move to the top when there's no tab bar under them (zen, full-height sheets) */
+html.zen-on .toasts, body:has(.modal.customize) .toasts {
+  top: calc(64px + var(--sat)); bottom: auto;
+}
+.zen-root:focus { outline: none; }
+@media (min-width: 900px) {
+  html.zen-on .toasts, body:has(.modal.customize) .toasts { top: 20px; }
 }

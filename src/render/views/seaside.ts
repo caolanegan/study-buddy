@@ -139,9 +139,9 @@ export class SeasideView implements View {
     p.rect(0, HZ + 4, WW, 5, sea[1]);
     p.rect(0, HZ + 9, WW, SHORE - HZ - 9, sea[2]);
     // dithered transitions between bands
-    for (let x = 0; x < WW; x += 2) {
-      p.px(x + ((HZ + 4) % 2), HZ + 4, sea[0]);
-      p.px(x + ((HZ + 9) % 2), HZ + 9, sea[1]);
+    for (let x = 0; x < WW; x++) {
+      if (h01(x * 5) < 0.4) p.px(x, HZ + 4, sea[0]);
+      if (h01(x * 9 + 1) < 0.4) p.px(x, HZ + 9, sea[1]);
     }
     // a far coast, hazy
     fillProfile(p, 0, 22, (x) => HZ - 2.5 + Math.sin(x * 0.25) * 1.2 + x * 0.06, HZ, () => (c.snowy ? '#a8b4c4' : '#6f8aa0'));

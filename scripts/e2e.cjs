@@ -17,6 +17,12 @@ const out = process.argv[2] || '.';
   await page.goto(URL);
   await page.waitForTimeout(1000);
   await page.screenshot({ path: `${out}/e2e-fresh.png` });
+  // first run shows the buddy / room onboarding: skip it
+  const skip = page.getByRole('dialog').getByRole('button', { name: /^skip$/i });
+  if (await skip.count()) {
+    await skip.click();
+    await page.waitForTimeout(400);
+  }
 
   // free timer session for 61 minutes → still-studying check
   const free = page.getByRole('button', { name: /free timer/i });

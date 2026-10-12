@@ -15,7 +15,7 @@ import { createBuddy } from './buddy';
 import { openCustomize } from './customize';
 import { createLetterUI } from './letters';
 import { openOnboarding } from './onboarding';
-import { copyVisitLink, shareRoom } from './share';
+import { buildShareCard, copyVisitLink, shareRoom } from './share';
 import { createVisitMode } from './visit';
 import { createZen } from './zen';
 import { bubbleCtxFrom, catchCopy, Chatter, isNewUser, type ChatMode } from './worldlogic';
@@ -227,6 +227,6 @@ export function createWorld(ctx: Ctx, d: { room: RoomView; renderer: RoomRendere
     },
   };
 
-  if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__world = { buddy, zen, visit, letter, world, startOnboarding };
+  if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__world = { ctx, buddy, zen, visit, letter, world, startOnboarding, shareCard: () => buildShareCard(ctx).toDataURL('image/png') };
   return world;
 }

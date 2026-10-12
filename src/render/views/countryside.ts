@@ -305,7 +305,7 @@ export class CountrysideView implements View {
       const pause = age > 7 && age < 12;
       const prog = pause ? 7 : age < 7 ? age : age - 5;
       const x = dir > 0 ? -6 + prog * 4.2 : WW + 6 - prog * 4.2;
-      drawDeer(p, x, 39, dir, c.time, pause, 0.8);
+      drawDeer(p, x, 39, dir, c.time, pause);
     } else {
       const x = dir > 0 ? -6 + age * 6 : WW + 6 - age * 6;
       drawFoxSprite(p, x, Math.round(laneY(x)) + 1, dir, c.time);

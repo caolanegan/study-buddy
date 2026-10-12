@@ -214,7 +214,7 @@ export function pine(p: Painter, x: number, base: number, h: number, lit: string
     }
     p.rect(x - hw, y, hw + 1, 1, lit);
     p.rect(x + 1, y, hw, 1, shade);
-    if (snow && tier === 0 && r > 0) {
+    if (snow && tier === 0 && r > 0 && (r % 8 === 4 || h < 12)) {
       p.rect(x - hw, y, Math.max(1, hw - 1), 1, SNOW);
       p.px(x + hw, y, SNOW_SHADE);
     }
@@ -228,16 +228,16 @@ export function roundTree(p: Painter, x: number, base: number, r: number, season
   p.rect(x, base - trunkH, 1 + (r > 4 ? 1 : 0), trunkH, TRUNK);
   const cy = base - trunkH - r + 1;
   if (season === 3) {
-    // bare branches
-    const tw = r > 4 ? 1 : 0;
+    // bare: a see-through crown of twigs over a few branches, snow on top
+    for (let dy = -r; dy <= r; dy++)
+      for (let dx = -r; dx <= r; dx++) {
+        if (dx * dx + dy * dy > r * r + 0.5 || (dx + dy + 64) % 2) continue;
+        p.px(x + dx, cy + dy, '#7a6a5e');
+      }
     p.line(x, base - trunkH, x - r + 1, cy - 1, TRUNK);
-    p.line(x + tw, base - trunkH, x + r - 1, cy - 1, TRUNK);
+    p.line(x, base - trunkH, x + r - 1, cy - 1, TRUNK);
     p.line(x, base - trunkH, x, cy - r + 1, TRUNK);
-    if (snow) {
-      p.px(x - r + 1, cy - 2, SNOW);
-      p.px(x + r - 1, cy - 2, SNOW);
-      p.px(x, cy - r, SNOW);
-    }
+    if (snow) for (let dx = -r + 1; dx < r; dx += 2) p.px(x + dx, cy - r + (Math.abs(dx) > r / 2 ? 1 : 0), SNOW);
     return;
   }
   const pal = FOLIAGE[season];
@@ -268,4 +268,4 @@ export function fillProfile(p: Painter, x0: number, x1: number, top: (x: number)
   }
 }
 
-export const rgbCss = (a: RGB, b: RGB, k: number) => css(mix(a, b, k));
+export const mixCss = (a: RGB, b: RGB, k: number) => css(mix(a, b, k));

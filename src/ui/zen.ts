@@ -23,7 +23,7 @@ function canFullscreen(): boolean {
 }
 
 export function createZen(stage: HTMLElement, sc: SessionController): Zen {
-  const root = h('div', { class: 'zen-root', role: 'region', 'aria-label': 'Zen mode' });
+  const root = h('div', { class: 'zen-root', role: 'region', 'aria-label': 'Zen mode — press Esc to exit', tabindex: -1 });
   const timer = h('div', { class: 'zen-timer', role: 'timer', 'aria-label': 'Study time this session' });
   const sub = h('div', { class: 'zen-sub' });
   const chip = h('div', { class: 'zen-chip' });
@@ -45,17 +45,25 @@ export function createZen(stage: HTMLElement, sc: SessionController): Zen {
   let hideTimer = 0;
   let lastKey = '';
 
+  let keyboard = false;
   const wake = () => {
     root.classList.remove('hud-hidden');
     clearTimeout(hideTimer);
     hideTimer = window.setTimeout(() => {
-      // keep controls up while they have keyboard focus
-      if (!hud.contains(document.activeElement)) root.classList.add('hud-hidden');
+      // keep controls up while a keyboard user is on them
+      if (!(keyboard && hud.contains(document.activeElement))) root.classList.add('hud-hidden');
     }, HIDE_AFTER);
   };
-  root.addEventListener('pointermove', wake);
-  root.addEventListener('pointerdown', wake);
+  root.addEventListener('pointermove', (e) => {
+    if (e.pointerType === 'mouse') keyboard = false;
+    wake();
+  });
+  root.addEventListener('pointerdown', () => {
+    keyboard = false;
+    wake();
+  });
   root.addEventListener('focusin', wake);
+  root.addEventListener('keydown', () => (keyboard = true));
 
   function toggle(want = !on) {
     if (want === on) return;
@@ -69,7 +77,7 @@ export function createZen(stage: HTMLElement, sc: SessionController): Zen {
       lastKey = '';
       wake();
       if (canFullscreen()) document.documentElement.requestFullscreen().catch(() => {});
-      requestAnimationFrame(() => close.focus({ preventScroll: true }));
+      requestAnimationFrame(() => root.focus({ preventScroll: true }));
     } else {
       clearTimeout(hideTimer);
       wentFull = false;

@@ -313,7 +313,13 @@ export function roomEditor(ctx: Ctx, draft: Draft, onChange: () => void): { el: 
 export function previewPane(ctx: Ctx, draft: Draft): { el: HTMLElement; preview: LivePreview; refresh(): void } {
   const preview = livePreview((time) => sceneFor(ctx.store.get(), ctx.now(), { look: draft.appearance, room: draft.room, mode: 'idle', daytime: true, time }), 'Live preview of your buddy and room');
   const tag = h('span', { class: 'cz-nametag' });
-  const el = h('div', { class: 'cz-stage' }, h('div', { class: 'cz-frame' }, preview.el, tag));
+  const tip = h(
+    'p',
+    { class: 'cz-tip' },
+    h('span', { 'aria-hidden': 'true' }, '💡'),
+    h('span', null, h('b', null, 'Tip: '), 'tap things in your room — your buddy, pets, the mug, the clock — and keep an eye on the sky for shooting stars.'),
+  );
+  const el = h('div', { class: 'cz-stage' }, h('div', { class: 'cz-frame' }, preview.el, tag), tip);
   const refresh = () => {
     tag.textContent = draft.appearance.name.trim() || 'Your buddy';
   };
@@ -380,6 +386,8 @@ export function openCustomize(ctx: Ctx, opts: CustomizeOpts = {}) {
       },
     ],
   });
+  // focus the tabs, not the name field (no surprise keyboard on phones)
+  requestAnimationFrame(() => (tab === 'character' ? tCh : tRm).focus({ preventScroll: true }));
   if (opts.onShare) {
     const share = h('button', { type: 'button', class: 'btn btn-small btn-ghost cz-share', onclick: opts.onShare }, h('span', { 'aria-hidden': 'true' }, '📤'), ' Share');
     m.el.querySelector('.modal-title')?.after(share);

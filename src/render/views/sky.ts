@@ -93,7 +93,7 @@ export class SkyPainter {
     if (c.open && night > 0.3) {
       const vis = (night - 0.3) / 0.7;
       if (milkyWay && c.weather === 'clear') {
-        g.globalAlpha = vis * 0.55;
+        g.globalAlpha = vis * 0.32;
         g.drawImage(this.milkyWay(), 0, 0);
         g.globalAlpha = 1;
       }
@@ -208,7 +208,7 @@ export class SkyPainter {
     const key = `${dark ? 1 : 0}|${w === 'snow' ? 1 : 0}|${lvl}|${sunset}`;
     const speed = w === 'storm' ? 4 : 1;
     if (dark || w === 'snow') {
-      const deck = this.overcast(key, dark, lvl / 8);
+      const deck = this.overcast(key, dark, lvl / 8, w === 'snow');
       const off = (c.time * 0.8 * speed) % 34;
       p.g.drawImage(deck, -off, 0);
     }
@@ -219,11 +219,15 @@ export class SkyPainter {
       const span = WW + cs.w + 10;
       const x = ((c.time * v + i * 37) % span) - cs.w - 5;
       const y = 2 + ((i * 7) % 15) + (dark ? -1 : 0);
-      p.g.drawImage(this.cloud(shape, key, dark, lvl / 8, sunset === 1 && !dark), Math.round(x), y);
+      p.g.drawImage(this.cloud(shape, key, dark, lvl / 8, sunset === 1 && !dark, w === 'snow'), Math.round(x), y);
     }
   }
 
-  private cloudCols(dark: boolean, day: number, sunset: boolean): [string, string, string] {
+  private cloudCols(dark: boolean, day: number, sunset: boolean, snow = false): [string, string, string] {
+    if (snow) {
+      const b = mix([218, 222, 230], [56, 62, 84], 1 - day);
+      return [css(mix(b, [255, 255, 255], 0.3)), css(b), css(mix(b, [120, 128, 150], 0.35))];
+    }
     if (dark) {
       const b = mix([128, 133, 148], [40, 44, 60], 1 - day);
       return [css(mix(b, [255, 255, 255], 0.12)), css(b), css(mix(b, [20, 22, 34], 0.25))];
@@ -233,15 +237,15 @@ export class SkyPainter {
     return [css(mix(base, [255, 255, 255], 0.3)), css(base), css(shade)];
   }
 
-  private cloud(shape: number, key: string, dark: boolean, day: number, sunset: boolean) {
+  private cloud(shape: number, key: string, dark: boolean, day: number, sunset: boolean, snow: boolean) {
     const k = shape + '|' + key;
     let cv = this.clouds.get(k);
     if (cv) return cv;
     const cs = CLOUDS[shape];
     cv = makeCanvas(cs.w, cs.h + 1);
     const pp = new Painter(cv.getContext('2d')!);
-    const [hi, mid, lo] = this.cloudCols(dark, day, sunset);
-    const alpha = dark ? 0.95 : 0.35 + 0.6 * day;
+    const [hi, mid, lo] = this.cloudCols(dark, day, sunset, snow);
+    const alpha = dark || snow ? 0.95 : 0.35 + 0.6 * day;
     pp.g.globalAlpha = alpha;
     // draw opaque into a temp then copy with alpha so overlapping puffs don't stack
     const tmp = makeCanvas(cs.w, cs.h + 1);
@@ -260,12 +264,12 @@ export class SkyPainter {
   }
 
   /** A bumpy dark cloud deck along the top of the window (drawn twice for wrap). */
-  private overcast(key: string, dark: boolean, day: number) {
+  private overcast(key: string, dark: boolean, day: number, snow: boolean) {
     let cv = this.deck.get(key);
     if (cv) return cv;
     cv = makeCanvas(WW + 40, 14);
     const pp = new Painter(cv.getContext('2d')!);
-    const [, mid, lo] = this.cloudCols(dark, day, false);
+    const [, mid, lo] = this.cloudCols(dark, day, false, snow);
     for (let x = 0; x < WW + 40; x++) {
       const ph = (x / 34) * Math.PI * 2;
       const hgt = 6 + Math.round(2.5 * Math.sin(ph) + 1.5 * Math.sin(ph * 2 + 1) + Math.sin(ph * 3 + 2));
