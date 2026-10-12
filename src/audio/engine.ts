@@ -26,6 +26,11 @@
 
 export type Weather = 'clear' | 'cloudy' | 'rain' | 'storm' | 'snow' | 'fog';
 
+/** What is outside the window (same ids as the profile's window views). */
+export type AudioView = 'street' | 'seaside' | 'city' | 'countryside' | 'forest';
+
+export const AUDIO_VIEWS: readonly AudioView[] = ['street', 'seaside', 'city', 'countryside', 'forest'];
+
 export interface AudioScene {
   studying: boolean; // session running (not paused, not on break)
   onBreak: boolean; // pomodoro break or paused
@@ -33,6 +38,10 @@ export interface AudioScene {
   season: 0 | 1 | 2 | 3; // spring, summer, autumn, winter
   weather: Weather;
   pets: string[]; // owned+equipped pet ids: 'cat' | 'dog' | 'fish-tank' | 'lizard'
+  /** Window view; selects the outdoor ambience. Default 'street'. */
+  view?: AudioView;
+  /** Sim day progress 0..1 (0 = sunrise, 0.5 = sunset; `SimTime.t`). Enables dawn sounds (rooster). */
+  timeOfDay?: number;
 }
 
 export type Sfx =
@@ -48,14 +57,45 @@ export type Sfx =
   | 'meow'
   | 'bark'
   | 'click'
-  | 'checkin';
+  | 'checkin'
+  // world events
+  | 'sparkle'
+  | 'balloon'
+  | 'fireworks'
+  | 'train'
+  | 'gull'
+  | 'owl'
+  | 'chirp'
+  | 'whoosh'
+  | 'horn'
+  // interactions
+  | 'purr'
+  | 'boop'
+  | 'hey'
+  | 'sip'
+  | 'rustle'
+  | 'tick'
+  | 'pop'
+  | 'paper'
+  | 'quest'
+  | 'level';
 
 /** Sounds that belong to the world (gated by the ambience switch, not UI effects). */
-const AMBIENT_SFX = new Set<Sfx>(['thunder', 'car', 'meow', 'bark']);
+const AMBIENT_SFX = new Set<Sfx>([
+  'thunder', 'car', 'meow', 'bark',
+  'balloon', 'fireworks', 'train', 'gull', 'owl', 'chirp', 'whoosh', 'horn',
+]);
+
+/** Which settings switch gates a `play()` sound: 'ambience' (world/pets) or 'sfx' (UI & interactions). */
+export function sfxChannel(name: Sfx): 'ambience' | 'sfx' {
+  return AMBIENT_SFX.has(name) ? 'ambience' : 'sfx';
+}
 
 export const SFX_NAMES: readonly Sfx[] = [
   'coin', 'achievement', 'purchase', 'chime', 'start', 'pause', 'end',
   'thunder', 'car', 'meow', 'bark', 'click', 'checkin',
+  'sparkle', 'balloon', 'fireworks', 'train', 'gull', 'owl', 'chirp', 'whoosh', 'horn',
+  'purr', 'boop', 'hey', 'sip', 'rustle', 'tick', 'pop', 'paper', 'quest', 'level',
 ];
 
 export interface PlayOptions {
@@ -92,9 +132,41 @@ export type AmbienceId =
   | 'purr'
   | 'bark'
   | 'pant'
-  | 'rustle';
+  | 'rustle'
+  // per-view outdoor sounds
+  | 'gull'
+  | 'foghorn'
+  | 'rigging'
+  | 'train'
+  | 'siren'
+  | 'pigeon'
+  | 'sheep'
+  | 'cow'
+  | 'rooster'
+  | 'tractor'
+  | 'songbird'
+  | 'woodpecker';
 
-export type LoopId = 'rain' | 'crickets' | 'wind' | 'bubbles';
+/**
+ * Continuous beds. rain/wind/crickets follow the weather; waves (seaside), hum (city),
+ * breeze (countryside), pines + stream + frogs (forest) follow the view; room = quiet room tone.
+ */
+export type LoopId =
+  | 'rain'
+  | 'crickets'
+  | 'wind'
+  | 'bubbles'
+  | 'waves'
+  | 'hum'
+  | 'breeze'
+  | 'pines'
+  | 'stream'
+  | 'frogs'
+  | 'room';
+
+export const LOOP_IDS: readonly LoopId[] = [
+  'rain', 'crickets', 'wind', 'bubbles', 'waves', 'hum', 'breeze', 'pines', 'stream', 'frogs', 'room',
+];
 
 /** Relative weights used when picking the next intermittent ambience. */
 export const AMBIENCE_WEIGHTS: Record<AmbienceId, number> = {
@@ -102,7 +174,7 @@ export const AMBIENCE_WEIGHTS: Record<AmbienceId, number> = {
   owl: 1.5,
   wind: 2,
   'distant-dog': 0.8,
-  car: 2,
+  car: 1.2,
   mug: 1,
   page: 1.5,
   clock: 0.8,
@@ -111,23 +183,69 @@ export const AMBIENCE_WEIGHTS: Record<AmbienceId, number> = {
   bark: 0.6,
   pant: 0.8,
   rustle: 1,
+  gull: 2.5,
+  foghorn: 0.35,
+  rigging: 1.4,
+  train: 0.6,
+  siren: 0.2,
+  pigeon: 2,
+  sheep: 1.6,
+  cow: 0.7,
+  rooster: 5,
+  tractor: 0.5,
+  songbird: 3,
+  woodpecker: 1.2,
 };
+
+/** Sim-day progress below which it counts as dawn (rooster time). */
+export const DAWN = 0.06;
 
 const isWet = (w: Weather) => w === 'rain' || w === 'storm';
 
-/** Which intermittent (one-shot) ambience sounds fit the scene. */
+/** Which intermittent (one-shot) ambience sounds fit the scene (view, time, season, weather, pets). */
 export function eligibleAmbience(s: AudioScene): AmbienceId[] {
   const out: AmbienceId[] = [];
+  const view = s.view ?? 'street';
   const wet = isWet(s.weather);
   const snow = s.weather === 'snow';
-  // Birds: daytime, mostly spring/summer; autumn only on clear days; never in rain/snow.
-  if (!s.isNight && !wet && !snow && (s.season <= 1 || (s.season === 2 && s.weather === 'clear'))) {
-    out.push('birds');
+  const storm = s.weather === 'storm';
+  const day = !s.isNight;
+  // Songbirds: daytime, mostly spring/summer; autumn only on clear days; never in rain/snow.
+  const birdy = day && !wet && !snow && (s.season <= 1 || (s.season === 2 && s.weather === 'clear'));
+  const owl = s.isNight && !wet;
+  switch (view) {
+    case 'street':
+      if (birdy) out.push('birds');
+      if (owl) out.push('owl');
+      if (!wet && !snow) out.push('distant-dog');
+      out.push('car');
+      break;
+    case 'seaside':
+      if (day && !wet && !snow) out.push('gull');
+      out.push('rigging');
+      if (s.isNight || s.weather === 'fog' || s.weather === 'cloudy' || s.weather === 'rain') out.push('foghorn');
+      break;
+    case 'city':
+      if (day && !storm && !snow) out.push('pigeon');
+      out.push('train');
+      if (!snow) out.push('siren');
+      break;
+    case 'countryside':
+      if (birdy) out.push('birds');
+      if (day && !storm && s.timeOfDay !== undefined && s.timeOfDay < DAWN) out.push('rooster');
+      if (day && !storm) out.push('sheep');
+      if (day && !storm && !snow) out.push('cow');
+      if (day && !wet && !snow && s.season !== 3) out.push('tractor');
+      if (!wet && !snow) out.push('distant-dog');
+      if (owl) out.push('owl');
+      break;
+    case 'forest':
+      if (birdy) out.push('songbird');
+      if (day && !wet && !snow) out.push('woodpecker');
+      if (owl) out.push('owl');
+      break;
   }
-  if (s.isNight && !wet) out.push('owl');
-  if (s.season >= 2 || snow || s.weather === 'storm') out.push('wind');
-  if (!wet && !snow) out.push('distant-dog');
-  out.push('car');
+  if (s.season >= 2 || snow || storm) out.push('wind');
   if (s.studying || s.onBreak) out.push('mug');
   if (s.studying) out.push('page');
   out.push('clock');
@@ -137,14 +255,32 @@ export function eligibleAmbience(s: AudioScene): AmbienceId[] {
   return out;
 }
 
-/** Target levels (0..1) for the continuous ambience beds. */
+const CRICKETS_BY_VIEW: Record<AudioView, number> = { street: 1, seaside: 0.4, city: 0.25, countryside: 1, forest: 0.7 };
+
+/** Target levels (0..1, sometimes a bit above for storms) for the continuous ambience beds. */
 export function loopLevels(s: AudioScene): Record<LoopId, number> {
+  const view = s.view ?? 'street';
   const wet = isWet(s.weather);
+  const snow = s.weather === 'snow';
+  const storm = s.weather === 'storm';
+  const winter = s.season === 3;
+  const night = s.isNight;
+  const crickets = night && !wet && !snow && s.season <= 1 ? (s.season === 1 ? 1 : 0.6) : 0;
   return {
-    rain: s.weather === 'storm' ? 1 : s.weather === 'rain' ? 0.55 : 0,
-    crickets: s.isNight && !wet && s.weather !== 'snow' && s.season <= 1 ? (s.season === 1 ? 1 : 0.6) : 0,
-    wind: s.weather === 'snow' ? 0.6 : s.weather === 'storm' ? 0.5 : s.season === 3 ? 0.3 : 0,
+    rain: storm ? 1 : s.weather === 'rain' ? 0.55 : 0,
+    crickets: crickets * CRICKETS_BY_VIEW[view],
+    wind: snow ? 0.6 : storm ? 0.5 : winter ? 0.3 : 0,
     bubbles: s.pets.includes('fish-tank') ? 1 : 0,
+    waves: view === 'seaside' ? (storm ? 1.35 : snow ? 0.7 : 1) * (night ? 0.85 : 1) * (winter ? 0.85 : 1) : 0,
+    hum: view === 'city' ? (night ? 0.6 : 1) * (snow ? 0.5 : wet ? 0.8 : 1) : 0,
+    breeze:
+      view === 'countryside' && !storm && !snow
+        ? (s.season === 2 ? 1.2 : winter ? 0.6 : 1) * (s.weather === 'rain' ? 0.5 : 1) * (night ? 0.8 : 1)
+        : 0,
+    pines: view === 'forest' ? (storm ? 0.6 : snow ? 0.7 : s.season >= 2 ? 1.2 : 1) : 0,
+    stream: view === 'forest' ? (winter || snow ? 0.45 : 1) : 0,
+    frogs: view === 'forest' && night && s.season <= 1 && !storm && !snow ? (s.season === 1 ? 1 : 0.7) : 0,
+    room: 1,
   };
 }
 
@@ -153,10 +289,13 @@ export function musicMode(s: AudioScene | null): 'full' | 'soft' {
   return s && s.studying && !s.onBreak ? 'full' : 'soft';
 }
 
-/** Seconds until the next intermittent ambience event (~20–90 s; sparser in snow). */
+/** Seconds until the next intermittent ambience event (~20–90 s; sparser in snow, winter and at night). */
 export function nextAmbienceDelay(s: AudioScene, rnd: () => number = Math.random): number {
-  const base = 20 + rnd() * 70;
-  return s.weather === 'snow' ? base * 1.4 : base;
+  let d = 20 + rnd() * 70;
+  if (s.weather === 'snow') d *= 1.4;
+  if (s.season === 3) d *= 1.25;
+  if (s.isNight) d *= 1.1;
+  return d;
 }
 
 /** Weighted random pick, avoiding an immediate repeat when possible. */
@@ -195,14 +334,39 @@ type Chord = readonly [degree: number, intervals: readonly number[]];
 
 /** Progressions as [scale degree in semitones from the key root, chord intervals]. */
 const PROGRESSIONS: readonly (readonly Chord[])[] = [
-  [[2, Q.m9], [7, Q.dom13], [0, Q.maj9], [9, Q.m9]], // ii V I vi
-  [[5, Q.maj9], [4, Q.m7], [2, Q.m9], [0, Q.maj9]], // IV iii ii I
-  [[0, Q.maj9], [9, Q.dom7b9], [2, Q.m9], [7, Q.dom9]], // I VI7 ii V
-  [[9, Q.m9], [2, Q.m11], [7, Q.dom9], [0, Q.maj9]], // vi ii V I
-  [[2, Q.m9], [7, Q.dom9], [4, Q.m7], [9, Q.dom7b9]], // ii V iii VI7
-  [[5, Q.maj7], [5, Q.m7], [0, Q.maj9], [9, Q.m9]], // IV iv I vi
+  [[2, Q.m9], [7, Q.dom13], [0, Q.maj9], [9, Q.m9]], // 0 ii V I vi
+  [[5, Q.maj9], [4, Q.m7], [2, Q.m9], [0, Q.maj9]], // 1 IV iii ii I
+  [[0, Q.maj9], [9, Q.dom7b9], [2, Q.m9], [7, Q.dom9]], // 2 I VI7 ii V
+  [[9, Q.m9], [2, Q.m11], [7, Q.dom9], [0, Q.maj9]], // 3 vi ii V I
+  [[2, Q.m9], [7, Q.dom9], [4, Q.m7], [9, Q.dom7b9]], // 4 ii V iii VI7
+  [[5, Q.maj7], [5, Q.m7], [0, Q.maj9], [9, Q.m9]], // 5 IV iv I vi
 ];
 const KEYS = [0, 2, 3, 5, 7, 8, 10];
+
+export interface MusicFlavor {
+  /** Candidate key roots (semitones above C). */
+  keys: readonly number[];
+  /** Candidate progression indices. */
+  progressions: readonly number[];
+  bpm: readonly [min: number, max: number];
+  /** 0..1 multiplier on optional notes (melody, re-hits, ghost hats). */
+  density: number;
+  /** Music low-pass cutoff (Hz): brighter in spring/summer days, mellower autumn/winter/night. */
+  tone: number;
+}
+
+/** Season/time-of-day colouring of the lo-fi: brighter spring/summer, mellower autumn/winter, sparser at night. */
+export function musicFlavor(s: AudioScene | null): MusicFlavor {
+  if (!s) return { keys: KEYS, progressions: [0, 1, 2, 3, 4, 5], bpm: [72, 80], density: 1, tone: 4800 };
+  const f: MusicFlavor =
+    s.season <= 1
+      ? { keys: [0, 2, 4, 7, 9], progressions: [0, 1, 2, 3], bpm: [74, 82], density: 1, tone: 5200 }
+      : s.season === 2
+        ? { keys: [3, 5, 8, 10], progressions: [0, 3, 4, 5], bpm: [70, 77], density: 0.9, tone: 4400 }
+        : { keys: [1, 3, 8, 10], progressions: [3, 4, 5], bpm: [68, 74], density: 0.8, tone: 4000 };
+  if (!s.isNight) return f;
+  return { ...f, bpm: [f.bpm[0] - 3, f.bpm[1] - 3], density: f.density * 0.55, tone: Math.round(f.tone * 0.8) };
+}
 
 // ───────────────────────────── engine ─────────────────────────────
 
@@ -213,6 +377,10 @@ const MIN = 0.0001;
 
 const MUSIC_LEVEL = { full: 0.55, soft: 0.32 };
 const AMB_LEVEL = 0.8;
+/** Closed-window low-pass on everything outdoors (Hz). */
+const WINDOW_LP = 5000;
+/** Skip purely decorative one-shots above this many live voices. */
+const DECOR_VOICES = MAX_VOICES * 0.8;
 const SFX_LEVEL = 0.7;
 const MASTER_LEVEL = 0.85;
 
@@ -276,12 +444,14 @@ export class AudioEngine {
   private outdoorGain!: GainNode;
   private sfxBus!: GainNode;
   private wowGain!: GainNode;
+  private musicLP!: BiquadFilterNode;
   private persistent: AudioScheduledSourceNode[] = [];
 
   // buffers
   private white!: AudioBuffer;
   private brown!: AudioBuffer;
   private crackleBuf!: AudioBuffer;
+  private pinkBuf: AudioBuffer | null = null;
 
   private voices = 0;
   private loops = new Map<LoopKey, LoopInst>();
@@ -308,6 +478,9 @@ export class AudioEngine {
   private dropNext = 0;
   private bubbleNext = 0;
   private cricketNext = [0, 0];
+  private frogNext = [0, 0];
+  private waveNext = 0;
+  private streamNext = 0;
   private simNow = 0;
 
   constructor(opts: EngineOptions = {}) {
@@ -376,7 +549,7 @@ export class AudioEngine {
 
   play(name: Sfx, opts: PlayOptions = {}): void {
     if (!this.ctx || !this.isLive()) return;
-    if (!(AMBIENT_SFX.has(name) ? this.ambienceOn : this.sfxOn)) return;
+    if (!(sfxChannel(name) === 'ambience' ? this.ambienceOn : this.sfxOn)) return;
     const t = this.now() + 0.01 + Math.max(0, opts.delay ?? 0);
     try {
       this.playAt(name, t, opts);
@@ -511,6 +684,7 @@ export class AudioEngine {
     this.musicBus.gain.value = 0;
     this.musicIn = ctx.createGain();
     const musicLP = this.filter('lowpass', 4800, 0.6);
+    this.musicLP = musicLP;
     this.musicIn.connect(musicLP);
     musicLP.connect(this.musicBus);
     this.musicBus.connect(mix);
@@ -559,7 +733,7 @@ export class AudioEngine {
     this.indoor = ctx.createGain();
     this.indoor.connect(this.ambBus);
     this.outdoor = ctx.createGain();
-    this.windowLP = this.filter('lowpass', 6000, 0.5);
+    this.windowLP = this.filter('lowpass', WINDOW_LP, 0.5);
     this.outdoorGain = ctx.createGain();
     this.outdoor.connect(this.windowLP);
     this.windowLP.connect(this.outdoorGain);
@@ -591,13 +765,13 @@ export class AudioEngine {
 
     const snow = s?.weather === 'snow';
     const fog = s?.weather === 'fog';
-    this.ramp(this.windowLP.frequency, snow ? 1500 : fog ? 3000 : 6000, 1.5);
+    this.ramp(this.windowLP.frequency, snow ? 1500 : fog ? 3000 : WINDOW_LP, 1.5);
     this.ramp(this.outdoorGain.gain, snow ? 0.6 : fog ? 0.8 : 1, 1.5);
+    this.ramp(this.musicLP.frequency, musicFlavor(s).tone, 3);
 
     this.setLoop('crackle', this.musicOn ? 1 : 0);
-    const levels: Record<LoopId, number> =
-      s && this.ambienceOn ? loopLevels(s) : { rain: 0, crickets: 0, wind: 0, bubbles: 0 };
-    for (const id of Object.keys(levels) as LoopId[]) this.setLoop(id, levels[id]);
+    const levels = s && this.ambienceOn ? loopLevels(s) : null;
+    for (const id of LOOP_IDS) this.setLoop(id, levels ? levels[id] : 0);
 
     if (!this.musicOn) this.musicRunning = false;
     if (s && this.nextAmbienceAt === 0) this.nextAmbienceAt = now + 6 + this.rnd() * 14;
@@ -704,6 +878,60 @@ export class AudioEngine {
         }
       });
     }
+    const frogs = this.loops.get('frogs');
+    if (frogs && frogs.level > 0) {
+      frogs.params.forEach((p, i) => {
+        if (this.frogNext[i] < now) this.frogNext[i] = now + 0.3 + this.rnd() * 1.5;
+        let guard = 0;
+        while (this.frogNext[i] < horizon && guard++ < 6) {
+          const t = this.frogNext[i];
+          // "rr-ibbit": a short burst of glottal pulses, sometimes a double croak
+          const pulses = 3 + Math.floor(this.rnd() * 4);
+          const double = this.rnd() < 0.4;
+          for (let c = 0; c < (double ? 2 : 1); c++) {
+            const ct = t + c * (pulses * 0.03 + 0.09);
+            for (let k = 0; k < pulses; k++) {
+              const pt = ct + k * 0.03;
+              p.setValueAtTime(0, pt);
+              p.linearRampToValueAtTime(1 - k * 0.08, pt + 0.005);
+              p.linearRampToValueAtTime(0, pt + 0.024);
+            }
+          }
+          this.frogNext[i] += this.rnd() < 0.15 ? 4 + this.rnd() * 6 : 0.9 + this.rnd() * 1.8;
+        }
+      });
+    }
+    const waves = this.loops.get('waves');
+    if (waves && waves.level > 0) {
+      if (this.waveNext < now) this.waveNext = now + 0.2;
+      if (this.waveNext < horizon) {
+        // one slow swell: the wash filter opens while it builds, then the foam drains away
+        const [lpF, wash, body] = waves.params;
+        const t = this.waveNext;
+        const rise = 2.6 + this.rnd() * 1.6;
+        const fall = 3.2 + this.rnd() * 2.2;
+        const crest = 0.65 + this.rnd() * 0.35;
+        lpF.setValueAtTime(420, t);
+        lpF.exponentialRampToValueAtTime(1100 + 900 * crest, t + rise);
+        lpF.exponentialRampToValueAtTime(420, t + rise + fall);
+        wash.setValueAtTime(0.18, t);
+        wash.linearRampToValueAtTime(crest, t + rise);
+        wash.linearRampToValueAtTime(0.18, t + rise + fall);
+        body.setValueAtTime(0.35, t);
+        body.linearRampToValueAtTime(0.6 + 0.4 * crest, t + rise * 0.8);
+        body.linearRampToValueAtTime(0.35, t + rise + fall * 0.8);
+        this.waveNext = t + rise + fall + this.rnd() * 1.2;
+      }
+    }
+    const stream = this.loops.get('stream');
+    if (stream && stream.level > 0) {
+      if (this.streamNext < now) this.streamNext = now + this.rnd() * 0.3;
+      let guard = 0;
+      while (this.streamNext < horizon && guard++ < 12) {
+        this.trickle(this.streamNext, stream.out);
+        this.streamNext += this.rnd() < 0.8 ? 0.08 + this.rnd() * 0.3 : 0.6 + this.rnd() * 1.4;
+      }
+    }
   }
 
   private scheduleAmbience(s: AudioScene, now: number) {
@@ -727,7 +955,7 @@ export class AudioEngine {
       case 'owl': return this.owl(t);
       case 'wind': return this.windGust(t);
       case 'distant-dog': return this.bark(t, true);
-      case 'car': return this.car(t, this.rnd() < 0.5 ? 1 : -1, 0.25);
+      case 'car': return this.car(t, this.rnd() < 0.5 ? 1 : -1, CAR_AMBIENT);
       case 'mug': return this.mug(t);
       case 'page': return this.page(t);
       case 'clock': return this.clock(t);
@@ -736,18 +964,35 @@ export class AudioEngine {
       case 'bark': return this.bark(t, false, 0.6);
       case 'pant': return this.pant(t);
       case 'rustle': return this.rustle(t);
+      case 'gull': return this.gull(t);
+      case 'foghorn': return this.foghorn(t);
+      case 'rigging': return this.rigging(t);
+      case 'train': return this.train(t, 0.8);
+      case 'siren': return this.siren(t);
+      case 'pigeon': return this.pigeon(t);
+      case 'sheep': return this.sheep(t);
+      case 'cow': return this.cow(t);
+      case 'rooster': return this.rooster(t);
+      case 'tractor': return this.tractor(t);
+      case 'songbird': return this.songbird(t);
+      case 'woodpecker': return this.woodpecker(t);
     }
   }
 
   // ─────────── music ───────────
 
   private newProgression(first: boolean) {
+    const fl = musicFlavor(this.scene);
     const prev = this.prog;
-    let p = PROGRESSIONS[Math.floor(this.rnd() * PROGRESSIONS.length)];
-    if (!first && p === prev) p = PROGRESSIONS[(PROGRESSIONS.indexOf(p) + 1) % PROGRESSIONS.length];
+    const pick = (k: number) => PROGRESSIONS[fl.progressions[k % fl.progressions.length]];
+    const k = Math.floor(this.rnd() * fl.progressions.length);
+    let p = pick(k);
+    if (!first && p === prev) p = pick(k + 1);
     this.prog = p;
-    if (first || this.rnd() < 0.5) this.musicKey = KEYS[Math.floor(this.rnd() * KEYS.length)];
-    this.bpm = 72 + Math.floor(this.rnd() * 9);
+    if (first || this.rnd() < 0.5 || !fl.keys.includes(this.musicKey)) {
+      this.musicKey = fl.keys[Math.floor(this.rnd() * fl.keys.length)];
+    }
+    this.bpm = fl.bpm[0] + Math.floor(this.rnd() * (fl.bpm[1] - fl.bpm[0] + 1));
     this.swing = 0.14 + this.rnd() * 0.12;
     this.barsPerProg = p.length * (2 + Math.floor(this.rnd() * 3));
   }
@@ -765,11 +1010,12 @@ export class AudioEngine {
       this.nextStepTime = now + 0.05;
     }
     const mode = musicMode(this.scene);
+    const density = musicFlavor(this.scene).density;
     let guard = 0;
     while (this.nextStepTime < horizon && guard++ < 64) {
       const stepDur = 60 / this.bpm / 4;
       const t = this.nextStepTime + (this.step % 2 === 1 ? this.swing * stepDur : 0);
-      this.musicStep(this.step, t, stepDur, mode);
+      this.musicStep(this.step, t, stepDur, mode, density);
       this.nextStepTime += stepDur;
       this.step++;
       if (this.step >= 16) {
@@ -790,7 +1036,7 @@ export class AudioEngine {
     return { root: base, notes: Array.from(new Set(voiced)) };
   }
 
-  private musicStep(step: number, t: number, sd: number, mode: 'full' | 'soft') {
+  private musicStep(step: number, t: number, sd: number, mode: 'full' | 'soft', density = 1) {
     const r = this.rnd;
     const idx = this.bar % this.prog.length;
     const { root, notes } = this.chordNotes(idx);
@@ -799,7 +1045,7 @@ export class AudioEngine {
 
     // chords (Rhodes-ish)
     if (step === 0) {
-      this.compRehit = r() < 0.35;
+      this.compRehit = r() < 0.35 * density;
       const dur = this.compRehit ? sd * 10 : barDur - 0.05;
       notes.forEach((n, i) => this.ep(n, t + i * (0.008 + r() * 0.01), dur, (soft ? 0.05 : 0.065) + r() * 0.02));
     } else if (step === 11 && this.compRehit) {
@@ -818,21 +1064,23 @@ export class AudioEngine {
     }
 
     // sparse melody
-    if ((step === 3 || step === 6 || step === 8 || step === 14) && r() < (soft ? 0.05 : 0.12)) {
+    if ((step === 3 || step === 6 || step === 8 || step === 14) && r() < (soft ? 0.05 : 0.12) * density) {
       const n = notes[Math.floor(r() * notes.length)] + 12;
       this.ep(n, t, sd * (2 + r() * 3), 0.045, true);
     }
 
     if (soft) return;
     // drums: boom-bap
-    if (step === 0 || (step === 7 && r() < 0.35) || step === 10 || (step === 15 && r() < 0.15)) {
+    if (step === 0 || (step === 7 && r() < 0.35 * density) || step === 10 || (step === 15 && r() < 0.15 * density)) {
       this.kick(t, step === 0 ? 0.8 : 0.6);
     }
     if (step === 4 || step === 12) this.snare(t, 0.32 + r() * 0.06);
-    else if ((step === 9 || step === 15) && r() < 0.12) this.snare(t, 0.08); // ghost
+    else if ((step === 9 || step === 15) && r() < 0.12 * density) this.snare(t, 0.08); // ghost
     if (step % 2 === 0) {
-      if (r() > 0.06) this.hat(t, 0.05 + r() * 0.035, step === 14 && r() < 0.25);
-    } else if (r() < 0.18) this.hat(t, 0.025, false);
+      // sparser hats when the flavour is sparse (night): drop some off-quarter eighths
+      const drop = step % 4 === 2 ? (1 - density) * 0.6 : 0;
+      if (r() > 0.06 + drop) this.hat(t, 0.05 + r() * 0.035, step === 14 && r() < 0.25 * density);
+    } else if (r() < 0.18 * density) this.hat(t, 0.025, false);
   }
 
   private ep(midi: number, t: number, dur: number, vel: number, lead = false) {
