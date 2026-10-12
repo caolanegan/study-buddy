@@ -56,15 +56,15 @@ export const ITEMS: Item[] = [
   { id: 'floor-lamp', name: 'Floor Lamp', category: 'furniture', price: 350, icon: '🛋️', blurb: 'Reading nook energy.' },
   { id: 'beanbag', name: 'Beanbag', category: 'furniture', price: 500, icon: '🫘', blurb: 'For break time.' },
   { id: 'bookshelf', name: 'Tall Bookshelf', category: 'furniture', price: 600, icon: '📚', blurb: 'Show off your reading.' },
-  { id: 'standing-desk', name: 'Standing Desk', category: 'furniture', price: 1500, icon: '🧍', slot: 'desk', blurb: 'He stands up during pomodoro breaks.' },
+  { id: 'standing-desk', name: 'Standing Desk', category: 'furniture', price: 1500, icon: '🧍', slot: 'desk', blurb: 'Your buddy stands up during pomodoro breaks.' },
   { id: 'tv', name: 'TV', category: 'furniture', price: 1500, icon: '📺', blurb: 'For well-earned breaks.' },
   { id: 'sofa', name: 'Sofa', category: 'furniture', price: 1800, icon: '🛋️', blurb: 'Comfy.' },
-  { id: 'ps5', name: 'PS5', category: 'furniture', price: 2000, icon: '🎮', requires: 'tv', blurb: 'He plays it when you take breaks.' },
+  { id: 'ps5', name: 'PS5', category: 'furniture', price: 2000, icon: '🎮', requires: 'tv', blurb: 'Your buddy plays it when you take breaks.' },
   // more everyday things
   { id: 'neon-sign', name: 'Neon Sign', category: 'furniture', price: 450, icon: '🌟', blurb: 'A buzzing "STUDY" sign that glows at night.' },
-  { id: 'coffee-machine', name: 'Coffee Machine', category: 'furniture', price: 500, icon: '☕', blurb: 'Fresh refills — he pops over on breaks.' },
+  { id: 'coffee-machine', name: 'Coffee Machine', category: 'furniture', price: 500, icon: '☕', blurb: 'Fresh refills — your buddy pops over on breaks.' },
   { id: 'record-player', name: 'Record Player', category: 'furniture', price: 700, icon: '🎶', blurb: 'Spins while the lo-fi plays.' },
-  { id: 'guitar', name: 'Guitar', category: 'furniture', price: 800, icon: '🎸', blurb: 'He strums a little on breaks.' },
+  { id: 'guitar', name: 'Guitar', category: 'furniture', price: 800, icon: '🎸', blurb: 'Strings shimmer on breaks.' },
   { id: 'telescope', name: 'Telescope', category: 'furniture', price: 1100, icon: '🔭', blurb: 'Stargazing on clear nights.' },
   { id: 'hamster', name: 'Hamster', category: 'pets', price: 600, icon: '🐹', blurb: 'Runs on its wheel, naps in its bedding.' },
   { id: 'robot-vacuum', name: 'Robot Vacuum', category: 'pets', price: 900, icon: '🤖', blurb: 'Bumps around the floor. The cat rides it sometimes.' },
@@ -84,7 +84,7 @@ export const ITEMS: Item[] = [
   { id: 'bunny-ears', name: 'Bunny Ears', category: 'attire', price: 200, icon: '🐰', slot: 'hat', limited: { from: '03-15', to: '04-30', event: 'Spring bloom' }, blurb: 'Floppy and fabulous.' },
   { id: 'desk-fan', name: 'Desk Fan', category: 'furniture', price: 250, icon: '🌀', limited: { from: '06-15', to: '08-31', event: 'Summer' }, blurb: 'Whirrs away the heat.' },
   { id: 'sunglasses', name: 'Sunglasses', category: 'attire', price: 200, icon: '😎', slot: 'face', limited: { from: '06-15', to: '08-31', event: 'Summer' }, blurb: 'Too cool for school (but still studying).' },
-  { id: 'study-globe', name: 'Desk Globe', category: 'furniture', price: 300, icon: '🌍', limited: { from: '09-01', to: '09-30', event: 'Back to school' }, blurb: 'Spins slowly while he thinks.' },
+  { id: 'study-globe', name: 'Desk Globe', category: 'furniture', price: 300, icon: '🌍', limited: { from: '09-01', to: '09-30', event: 'Back to school' }, blurb: 'Spins slowly while your buddy thinks.' },
 ];
 
 const mmdd = (ts: number) => {

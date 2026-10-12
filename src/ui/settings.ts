@@ -313,7 +313,7 @@ export function createSettingsView(ctx: Ctx) {
           void ctx.audio.unlock();
           update({ music: v });
         }),
-        toggle('Keyboard typing', 'Soft key clicks while he works', s.typing, (v) => {
+        toggle('Keyboard typing', 'Soft key clicks while your buddy works', s.typing, (v) => {
           void ctx.audio.unlock();
           update({ typing: v });
         }),
