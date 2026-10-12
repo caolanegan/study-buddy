@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1d1b26">
+<title>Study Buddy · What's new</title>
+<style>
+  :root {
+    --bg: #1d1b26; --panel: #2a2736; --panel2: #34303f; --ink: #f3ead8; --muted: #a79fb5;
+    --accent: #f2b134; --go: #5fbf77; --line: #463f55; --pink: #e07aa5;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.55 ui-rounded, "SF Pro Rounded", -apple-system, system-ui, sans-serif;
+  }
+  main { max-width: 1040px; margin: 0 auto; padding: 0 16px 80px; }
+  header.hero {
+    padding: 56px 16px 40px; text-align: center;
+    background: radial-gradient(ellipse at 50% 0%, #3a2f52 0%, var(--bg) 70%);
+  }
+  .hero h1 { font-size: clamp(30px, 6vw, 48px); margin: 0 0 8px; letter-spacing: .3px; }
+  .hero p { color: var(--muted); max-width: 640px; margin: 0 auto 22px; font-size: 18px; }
+  .btns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px; min-height: 46px; padding: 0 20px;
+    border-radius: 14px; font-weight: 800; text-decoration: none; color: #1d1b26; background: var(--go);
+  }
+  .btn.alt { background: var(--accent); }
+  .btn.ghost { background: var(--panel2); color: var(--ink); border: 1px solid var(--line); }
+  .hero-img { max-width: 900px; margin: 34px auto 0; }
+  img { display: block; width: 100%; height: auto; border-radius: 14px; border: 1px solid var(--line); image-rendering: auto; }
+  img.pixel { image-rendering: pixelated; }
+  section { margin-top: 64px; }
+  section > h2 { font-size: clamp(24px, 4vw, 32px); margin: 0 0 6px; }
+  section > p.lead { color: var(--muted); margin: 0 0 22px; max-width: 760px; font-size: 17px; }
+  .grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); align-items: start; }
+  .grid.two { grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); }
+  .grid.phones { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+  figure { margin: 0; }
+  figure.phone img { max-width: 340px; margin: 0 auto; }
+  figure.phone figcaption { text-align: center; }
+  figcaption { color: var(--muted); font-size: 14px; margin-top: 8px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; }
+  .card h3 { margin: 0 0 6px; font-size: 18px; }
+  ul.ticks { list-style: none; padding: 0; margin: 0; }
+  ul.ticks li { padding: 6px 0 6px 28px; position: relative; }
+  ul.ticks li::before { content: "✓"; position: absolute; left: 4px; color: var(--go); font-weight: 900; }
+  .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; background: var(--panel2); border: 1px solid var(--line); font-size: 13px; color: var(--muted); margin: 0 4px 6px 0; }
+  .todo { border-color: var(--accent); }
+  .todo ol { margin: 8px 0 0; padding-left: 22px; }
+  .todo li { margin: 6px 0; }
+  code { background: var(--panel2); padding: 1px 6px; border-radius: 6px; font-size: 14px; }
+  nav.toc { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 26px; }
+  nav.toc a { color: var(--ink); text-decoration: none; background: var(--panel); border: 1px solid var(--line); padding: 6px 12px; border-radius: 999px; font-size: 14px; }
+  footer { color: var(--muted); text-align: center; margin-top: 70px; font-size: 14px; }
+  @media (max-width: 520px) {
+    .grid.two { grid-template-columns: 1fr; }
+    .grid.phones { grid-template-columns: 1fr 1fr; gap: 12px; }
+  }
+</style>
+</head>
+<body>
+<header class="hero">
+  <h1>☀️ Good morning!</h1>
+  <p>Here’s what happened to Study Buddy overnight. It’s now a little living world: customisable buddies and rooms, five views out the window, random happenings, quests, letters, friends and lots more.</p>
+  <div class="btns">
+    <a class="btn" href="../">▶ Open the app</a>
+    <a class="btn alt" href="../playground.html">🧪 Playground: try everything</a>
+    <a class="btn ghost" href="#todo">📝 What I need from you</a>
+  </div>
+  <nav class="toc">
+    <a href="#tweaks">Your tweaks</a><a href="#world">Living world</a><a href="#yours">Make it yours</a><a href="#tap">Tap anything</a>
+    <a href="#motivation">Motivation</a><a href="#friends">Friends &amp; sharing</a><a href="#quality">Under the hood</a>
+  </nav>
+  <div class="hero-img"><img src="img/desktop-2-room-night.png" alt="The room at night on desktop"></div>
+</header>
+
+<main>
+  <section id="tweaks">
+    <h2>✅ Your three tweaks</h2>
+    <div class="grid">
+      <div class="card"><h3>☕ Mug moved closer</h3>It now sits right by the keyboard. The coffee drains while you study, and tapping the mug makes them take a sip.</div>
+      <div class="card"><h3>⟩ Collapsible side panel</h3>On desktop, hide Shop / Goals / Stats with the <b>⟩</b> button (or press <code>\</code>) and the room grows to fill the screen. Bring the panel back with the tab on the right.</div>
+      <div class="card"><h3>🔈 Separate sound switches</h3>Music, keyboard typing, ambience and sound effects each have their own switch in Settings. Cars are much quieter and rarer.</div>
+    </div>
+    <figure style="margin-top:18px"><img loading="lazy" src="img/desktop-collapsed.png" alt="Desktop with the side panel collapsed"><figcaption>Side panel collapsed: the room takes over.</figcaption></figure>
+  </section>
+
+  <section id="world">
+    <h2>🌍 A little living world</h2>
+    <p class="lead">Pick one of five views out of the window. Each view has its own seasons, weather and day/night cycle, plus its own sounds and residents.</p>
+    <figure><img loading="lazy" src="img/views-sheet.png" class="pixel" alt="Five window views by day and night"><figcaption>Quiet street · Seaside (lighthouse, sailboats, dolphins) · City skyline (trains, lit windows, planes) · Countryside (windmill, sheep, tractor) · Forest cabin (deer, owl, aurora, misty lake).</figcaption></figure>
+    <p class="lead" style="margin-top:28px">Random things happen while you study, and some can be <b>caught</b> for coins: tap a shooting star, a bird on the windowsill, a hot-air balloon or a UFO.</p>
+    <figure><img loading="lazy" src="img/events-sheet.png" class="pixel" alt="World events"><figcaption>Balloons, kites, flocks, a visiting bird, UFOs, fireworks (every new sim year), aurora, rainbows after rain, shooting stars, dolphins, whales, deer, foxes, tractors, helicopters, trains…</figcaption></figure>
+    <div class="grid two" style="margin-top:22px">
+      <figure><img loading="lazy" src="img/everything-night.png" class="pixel" alt="A fully decorated room at night"><figcaption>A fully decorated room at night: fairy lights, a neon sign, lanterns, a parrot, a hamster, a record player and a festive tree.</figcaption></figure>
+      <figure><img loading="lazy" src="img/halloween-night.png" class="pixel" alt="Halloween room"><figcaption>It’s October, so Halloween items are in the shop now: a jack-o’-lantern, a witch hat, a friendly ghost that says “boo”, and bat garlands.</figcaption></figure>
+    </div>
+    <div class="grid phones" style="margin-top:22px">
+      <figure><img loading="lazy" src="img/iphone-8-zen.png" alt="Zen mode on iPhone"><figcaption><b>Zen mode</b> (⛶ or <code>F</code>): on phones you get a big live window view above the room.</figcaption></figure>
+      <figure><img loading="lazy" src="img/desktop-zen.png" alt="Zen mode on desktop"><figcaption>Zen on desktop: the room fills the screen and the controls hide themselves.</figcaption></figure>
+      <figure><img loading="lazy" src="img/plant-growth-and-sill.png" class="pixel" alt="Plant growth"><figcaption>The starter plant <b>grows</b> with your total hours (all the way to flowering at 150 h), and the windowsill decorations change with the seasons.</figcaption></figure>
+    </div>
+    <div class="card" style="margin-top:18px">
+      <h3>🎧 It sounds like where you are</h3>
+      Ambience matches the view: waves, gulls and a far-off foghorn by the sea; city hum and trains; breeze, sheep and a rooster at dawn in the countryside; pines, a stream, woodpeckers and owls in the forest. It’s all quiet, sits under the lo-fi music, and changes with the season and weather.
+    </div>
+  </section>
+
+  <section id="yours">
+    <h2>🎨 Make it yours</h2>
+    <p class="lead">New users go through a short welcome: name your buddy, pick their look, then pick a room and view. You can change everything later, for free, with the ✏️ button on the room.</p>
+    <div class="grid phones">
+      <figure><img loading="lazy" src="img/iphone-onboarding-1.png" alt="Onboarding"><figcaption>First-run welcome</figcaption></figure>
+      <figure><img loading="lazy" src="img/iphone-3-customise.png" alt="Customise sheet"><figcaption>Customise with a live preview</figcaption></figure>
+    </div>
+    <figure style="margin-top:18px"><img loading="lazy" src="img/hairstyles.png" alt="Hairstyles" loading="lazy"><figcaption>10 hairstyles × 8 hair colours × 6 skin tones × 7 hoodie colours. Every hat and pair of headphones fits every style.</figcaption></figure>
+    <figure style="margin-top:18px"><img loading="lazy" src="img/room-presets.png" alt="Room presets"><figcaption>Six room presets (Cozy bedroom, Seaside studio, City loft, Country cottage, Forest cabin, Night owl), or mix 8 walls, 6 floors and 6 curtain options (including wooden blinds) yourself.</figcaption></figure>
+  </section>
+
+  <section id="tap">
+    <h2>👆 Tap anything</h2>
+    <p class="lead">Tap your buddy and they turn round, wave, give a thumbs-up or jump. They also chat on their own in speech bubbles, about the weather, the season, your streak, and anything happening outside. Pets and objects react when tapped too.</p>
+    <div class="grid two">
+      <figure><img loading="lazy" src="img/tap-interactions.png" alt="Tap interactions"><figcaption>The cat wakes and purrs, the dog wags, fish dart, the clock spins, the lamp switches, the TV flicks on…</figcaption></figure>
+      <figure class="phone"><img loading="lazy" src="img/iphone-tap-bubble.png" alt="Speech bubble"><figcaption>Speech bubbles (you can turn them off in Settings).</figcaption></figure>
+    </div>
+  </section>
+
+  <section id="motivation">
+    <h2>🔥 Things that keep you studying</h2>
+    <div class="grid phones">
+      <figure><img loading="lazy" src="img/iphone-4-goals.png" alt="Goals tab"><figcaption><b>Daily quests</b> (3 a day, new at midnight), <b>weekly quests</b> and 26 achievements, in the new Goals tab.</figcaption></figure>
+      <figure><img loading="lazy" src="img/iphone-letter.png" alt="Daily letter"><figcaption>A <b>letter</b> slips under the door every day, from Grandma, Future You, the cat, the lighthouse keeper… with a few coins.</figcaption></figure>
+      <figure><img loading="lazy" src="img/iphone-5-shop-limited.png" alt="Limited shop"><figcaption><b>Limited-time items</b> that follow the real calendar (Halloween now, Harvest from 1 Nov, winter festival in December). Plus 8 new everyday items and pets.</figcaption></figure>
+      <figure><img loading="lazy" src="img/iphone-7-stats.png" alt="Stats"><figcaption>Tag <b>what you studied</b> at the end of a session and see your hours by subject.</figcaption></figure>
+    </div>
+    <div class="card" style="margin-top:18px">
+      <span class="pill">Milestone toasts for new days, seasons and years</span>
+      <span class="pill">A “Next quest” nudge under the timer</span>
+      <span class="pill">Coffee level and refills</span>
+      <span class="pill">New pets: hamster, parrot, robot vacuum (the cat rides it)</span>
+      <span class="pill">Breaks: PS5, beanbag, standing desk</span>
+      <span class="pill">New rooms start at 8am, not at dusk</span>
+    </div>
+  </section>
+
+  <section id="friends">
+    <h2>🤝 Friends &amp; sharing</h2>
+    <div class="grid two">
+      <figure><img loading="lazy" src="img/friends-in-desk.png" alt="Leaderboard"><figcaption><b>Leaderboards</b> (opt-in, needs cloud sync): add friends by code, race on weekly hours, and visit each other’s rooms. (Screenshot uses example friends.)</figcaption></figure>
+      <figure><img loading="lazy" src="img/share-card.png" alt="Share card"><figcaption><b>Share my room</b> makes a picture card plus a link that lets anyone visit your room read-only. This works without sync.</figcaption></figure>
+    </div>
+  </section>
+
+  <section id="quality">
+    <h2>🔧 Under the hood</h2>
+    <div class="grid">
+      <div class="card"><h3>Tested</h3><ul class="ticks"><li>168 automated tests</li><li>Real-browser checks on iPhone, iPhone SE, iPad and desktop sizes</li><li>A full QA playthrough and a separate code review</li><li>About 60 fps with everything bought; checked with the CPU slowed 4×</li></ul></div>
+      <div class="card"><h3>Sync hardened</h3><ul class="ticks"><li>No more endless back-and-forth syncing</li><li>Merges are deterministic: devices always agree</li><li>A new device won’t overwrite your buddy</li><li>Switching accounts never mixes data</li></ul></div>
+      <div class="card"><h3>Fair &amp; safe</h3><ul class="ticks"><li>Catches pay at most 8 times a day</li><li>Manually logged time doesn’t count for quests or leaderboards</li><li>Leaderboard rows are private unless public; friend codes can’t be spoofed</li><li>Visit links are sanitised</li></ul></div>
+    </div>
+  </section>
+
+  <section id="todo">
+    <h2>📝 What I need from you</h2>
+    <div class="card todo">
+      <ol>
+        <li><b>Nothing for the basics.</b> Everything is live at the app link above, and your existing hours and coins carry over. On your next visit you can open ✏️ to pick your buddy and room.</li>
+        <li><b>For cloud sync + leaderboards:</b> create a free Supabase project, open the SQL editor and run <code>supabase/schema.sql</code> from the repo (it’s safe to re-run). Then paste the project URL and anon key into <b>Settings → Cloud sync</b> and sign in on each device. The README has step-by-step instructions.</li>
+        <li><b>Turn on leaderboards</b> in the Friends tab, then share your friend code.</li>
+        <li><b>Have a play in the Playground</b> to see every view, item, event and character without studying 100 hours. Then tell me what you’d like changed!</li>
+      </ol>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <h3>Known rough edges</h3>
+      <ul>
+        <li>On a phone, visiting a friend’s room leaves empty space under it. On desktop, your own shop panel stays open while you visit.</li>
+        <li>Resetting data while the app is open in another tab can bring the data back from that tab.</li>
+        <li>The friendly ghost sometimes floats in front of your buddy’s head.</li>
+        <li>Room size is fixed. I made the room fully customisable instead (walls, floors, curtains, view and 40+ items).</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>Made overnight with care. Happy studying! 📚</footer>
+</main>
+</body>
+</html>

@@ -1,5 +1,5 @@
 // Offline support: network-first for pages, cache-first for hashed assets.
-const CACHE = 'study-buddy-v1';
+const CACHE = 'study-buddy-v2';
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(['./', './index.html', './manifest.webmanifest'])).then(() => self.skipWaiting()));
@@ -16,14 +16,18 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(req.url);
   if (req.method !== 'GET' || url.origin !== self.location.origin) return; // never cache Supabase etc.
   if (req.mode === 'navigate') {
+    // cache each page under its own URL (the app, playground, what's new…), ignoring #hash / ?query
+    const key = new Request(url.origin + url.pathname);
     e.respondWith(
       fetch(req)
         .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put('./index.html', copy));
+          if (res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE).then((c) => c.put(key, copy));
+          }
           return res;
         })
-        .catch(() => caches.match('./index.html')),
+        .catch(() => caches.match(key).then((hit) => hit || caches.match('./index.html'))),
     );
     return;
   }
