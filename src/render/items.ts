@@ -2150,7 +2150,7 @@ function ghostState(s: RenderScene) {
   const P = ghostPath(t);
   const free = { ...P, hide: false, look: Math.cos(t * 0.16) < 0, boo: false };
   if (!s.items.has('sofa') || c < 40) return free;
-  const S = { x: SOFA.x + 14, y: SOFA.top + 13 };
+  const S = { x: SOFA.x + 26, y: SOFA.top + 13 }; // between the pillow and the blanket
   if (c < 43) {
     const k = ease((c - 40) / 3);
     const A = ghostPath(t - (c - 40));
@@ -2159,7 +2159,7 @@ function ghostState(s: RenderScene) {
   if (c < 52) {
     const k = c - 43; // rise, look around, boo, sink
     const up = k < 1.5 ? k / 1.5 : k < 7.5 ? 1 : Math.max(0, 1 - (k - 7.5) / 1.5);
-    return { x: S.x, y: S.y - Math.round(up * 8), hide: true, look: k > 2.5 && k < 4.5, boo: k > 5 && k < 7 };
+    return { x: S.x, y: S.y - Math.round(up * 10), hide: true, look: k > 2.5 && k < 4.5, boo: k > 5 && k < 7 };
   }
   if (c < 56) return { x: S.x, y: S.y + 10, hide: true, look: false, boo: false }; // gone
   const k = ease((c - 56) / 8);
