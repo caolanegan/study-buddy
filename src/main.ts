@@ -280,7 +280,18 @@ function frame() {
   const weather = weatherAt(total);
   const mode = sceneMode(s.active);
   const its = items(s);
-  renderer.render({ time: performance.now() / 1000, sim, weather, moon: moonPhase(total), mode, items: its });
+  renderer.render({
+    time: performance.now() / 1000,
+    sim,
+    weather,
+    moon: moonPhase(total),
+    mode,
+    items: its,
+    look: s.profile.appearance,
+    room: s.profile.room,
+    studiedHours: total / 3_600_000,
+    realNow: now,
+  });
   if (now - lastDom >= 250) updateDom(now);
   if (now - lastAudio >= 1000) {
     lastAudio = now;

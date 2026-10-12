@@ -72,7 +72,8 @@ export function balance(state: AppState): number {
   const earned = state.sessions.reduce((a, s) => a + s.coins, 0);
   const rewards = Object.keys(state.achievements).reduce((a, id) => a + (ACHIEVEMENTS.find((x) => x.id === id)?.reward ?? 0), 0);
   const spent = state.purchases.reduce((a, p) => a + p.price, 0);
-  return earned + rewards - spent;
+  const bonuses = state.bonuses.reduce((a, b) => a + b.reward, 0);
+  return earned + rewards + bonuses - spent;
 }
 
 export function lifetimeCoins(state: AppState): number {

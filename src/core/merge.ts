@@ -27,6 +27,15 @@ export function mergeStates(a: AppState, b: AppState): AppState {
   const candidates = [a.active, b.active].filter((x): x is NonNullable<typeof x> => !!x && !sessionIds.has(x.id) && !deleted.has(x.id));
   const active = candidates.sort((x, y) => y.updatedAt - x.updatedAt)[0] ?? null;
 
+  const bonuses = unionById(a.bonuses ?? [], b.bonuses ?? [], new Set()).sort((x, y) => x.at - y.at);
+  // Sessions annotated on one device (subject/note) win over the bare copy.
+  const annotated = new Map([...a.sessions, ...b.sessions].filter((s) => s.subject || s.note).map((s) => [s.id, s]));
+  for (let i = 0; i < sessions.length; i++) {
+    const other = annotated.get(sessions[i].id);
+    if (other && !sessions[i].subject && !sessions[i].note) sessions[i] = other;
+  }
+  const prA = (a.profileUpdatedAt ?? 0) >= (b.profileUpdatedAt ?? 0);
+  const frA = (a.friendsUpdatedAt ?? 0) >= (b.friendsUpdatedAt ?? 0);
   const eqA = a.equippedUpdatedAt >= b.equippedUpdatedAt;
   const stA = a.settingsUpdatedAt >= b.settingsUpdatedAt;
   return {
@@ -40,5 +49,10 @@ export function mergeStates(a: AppState, b: AppState): AppState {
     settings: stA ? a.settings : b.settings,
     settingsUpdatedAt: Math.max(a.settingsUpdatedAt, b.settingsUpdatedAt),
     deletedSessions: [...deleted],
+    profile: prA ? a.profile : b.profile,
+    profileUpdatedAt: Math.max(a.profileUpdatedAt ?? 0, b.profileUpdatedAt ?? 0),
+    bonuses,
+    friends: frA ? a.friends : b.friends,
+    friendsUpdatedAt: Math.max(a.friendsUpdatedAt ?? 0, b.friendsUpdatedAt ?? 0),
   };
 }

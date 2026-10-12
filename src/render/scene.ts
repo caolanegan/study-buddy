@@ -1,5 +1,6 @@
 import type { SimTime } from '../core/sim';
 import type { Weather } from '../core/weather';
+import type { Appearance, RoomStyle } from '../core/profile';
 
 export type Mode = 'studying' | 'paused' | 'break' | 'idle';
 
@@ -13,12 +14,63 @@ export interface RenderScene {
   mode: Mode;
   /** Equipped item ids. */
   items: Set<string>;
+  /** The buddy's look (skin, hair, default top). */
+  look: Appearance;
+  /** Wall / floor / curtains / window view. */
+  room: RoomStyle;
+  /** Total hours studied (the starter plant grows with it, etc.). */
+  studiedHours: number;
+  /** Real-world clock (epoch ms) for real-calendar decorations like Halloween. */
+  realNow: number;
 }
+
+/** Things you can tap in the room. */
+export type HitTarget =
+  | 'character'
+  | 'mug'
+  | 'cat'
+  | 'dog'
+  | 'fish-tank'
+  | 'lizard'
+  | 'plant'
+  | 'clock'
+  | 'window'
+  | 'lamp'
+  | 'tv'
+  /** a catchable thing outside (shooting star, balloon, bird on the sill…) */
+  | 'world-event';
+
+/** Random happenings outside / in the room, reported so the UI can show a bubble and play a sound. */
+export type WorldEventKind =
+  | 'shooting-star'
+  | 'balloon'
+  | 'rainbow'
+  | 'aurora'
+  | 'fireworks'
+  | 'kite'
+  | 'bird-visit'
+  | 'ufo'
+  | 'train'
+  | 'boat'
+  | 'dolphin'
+  | 'deer'
+  | 'fox'
+  | 'owl'
+  | 'sheep'
+  | 'tractor'
+  | 'plane'
+  | 'helicopter'
+  | 'fireflies'
+  | 'whale';
 
 export interface RenderEvents {
   onCar?: (dir: 1 | -1) => void;
   onThunder?: () => void;
   onPet?: (pet: 'cat' | 'dog') => void;
+  /** A notable world event started (for bubbles / sounds). */
+  onWorldEvent?: (kind: WorldEventKind) => void;
+  /** The user tapped a catchable world event (e.g. caught a shooting star). */
+  onCatch?: (kind: WorldEventKind) => void;
 }
 
 // Shared layout constants (logical pixels in a 240x150 canvas)

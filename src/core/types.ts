@@ -1,3 +1,5 @@
+import type { Profile } from './profile';
+
 // Persisted app state. Everything that affects money is an append-only log
 // (sessions, purchases, achievement unlocks) so states from two devices can be
 // merged by union without double-counting; balances are always derived.
@@ -18,6 +20,10 @@ export interface Session {
   /** Completed pomodoro work blocks (0 for free sessions). */
   pomodoros: number;
   manual?: boolean;
+  /** What was studied (free text, e.g. "Maths"). */
+  subject?: string;
+  /** Optional reflection written at the end. */
+  note?: string;
   /** Per-local-day active ms, used for streaks / daily totals. */
   byDay: Record<string, number>;
 }
@@ -51,6 +57,21 @@ export interface Purchase {
   at: number;
 }
 
+/** One-off coin rewards (quests, daily letters, caught shooting stars…). Ids are deterministic so two devices can't double-claim. */
+export interface Bonus {
+  id: string;
+  kind: 'quest' | 'letter' | 'catch' | 'gift';
+  reward: number;
+  at: number;
+  label?: string;
+}
+
+export interface Friend {
+  code: string;
+  name: string;
+  addedAt: number;
+}
+
 export interface Settings {
   /** UI sound effects (coins, chimes, clicks). */
   sound: boolean;
@@ -64,6 +85,12 @@ export interface Settings {
   pomodoroBreakMin: number;
   pomodoroLongBreakMin: number;
   dailyGoalMin: number;
+  /** Show the buddy's speech bubbles. */
+  bubbles: boolean;
+  /** Share weekly hours with friends on the leaderboard (needs cloud sync). */
+  leaderboard: boolean;
+  /** Also appear on the public "Everyone" board. */
+  leaderboardPublic: boolean;
 }
 
 export interface AppState {
@@ -80,4 +107,9 @@ export interface AppState {
   settingsUpdatedAt: number;
   /** ids of sessions the user deleted (tombstones for sync) */
   deletedSessions: string[];
+  profile: Profile;
+  profileUpdatedAt: number;
+  bonuses: Bonus[];
+  friends: Friend[];
+  friendsUpdatedAt: number;
 }

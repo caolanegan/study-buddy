@@ -1,8 +1,9 @@
-import type { AppState, Session, Settings } from './types';
+import type { AppState, Bonus, Session, Settings } from './types';
 import { ACHIEVEMENTS, computeStats } from './achievements';
 import { balance, coinsFor, dailyTotals, multiplierFor, streakInfo } from './economy';
-import { itemById, slotOf } from './catalog';
+import { isAvailable, itemById, slotOf } from './catalog';
 import { MIN, splitByDay, uid } from './time';
+import { DEFAULT_PROFILE, normalizeProfile, type Profile } from './profile';
 import {
   activeByDay,
   activeMs,
@@ -27,6 +28,9 @@ export const DEFAULT_SETTINGS: Settings = {
   pomodoroBreakMin: 5,
   pomodoroLongBreakMin: 15,
   dailyGoalMin: 120,
+  bubbles: true,
+  leaderboard: false,
+  leaderboardPublic: false,
 };
 
 export function defaultState(): AppState {
@@ -41,6 +45,11 @@ export function defaultState(): AppState {
     settings: { ...DEFAULT_SETTINGS },
     settingsUpdatedAt: 0,
     deletedSessions: [],
+    profile: structuredClone(DEFAULT_PROFILE),
+    profileUpdatedAt: 0,
+    bonuses: [],
+    friends: [],
+    friendsUpdatedAt: 0,
   };
 }
 
@@ -48,7 +57,13 @@ export function defaultState(): AppState {
 export function normalize(raw: Partial<AppState> | null | undefined): AppState {
   const d = defaultState();
   if (!raw || typeof raw !== 'object') return d;
-  return { ...d, ...raw, settings: { ...d.settings, ...(raw.settings ?? {}) }, version: 1 };
+  const merged = { ...d, ...raw, settings: { ...d.settings, ...(raw.settings ?? {}) }, version: 1 as const };
+  merged.profile = normalizeProfile(raw.profile);
+  if (!Array.isArray(merged.bonuses)) merged.bonuses = [];
+  if (!Array.isArray(merged.friends)) merged.friends = [];
+  // people who studied before profiles existed already know the app — skip the intro
+  if (!raw.profile && (raw.sessions?.length ?? 0) > 0) merged.profile.onboarded = true;
+  return merged;
 }
 
 export function evaluateAchievements(state: AppState, now: number): { state: AppState; unlocked: string[] } {
@@ -150,20 +165,21 @@ export function owns(state: AppState, itemId: string): boolean {
   return state.purchases.some((p) => p.itemId === itemId);
 }
 
-export type BuyError = 'unknown' | 'owned' | 'funds' | 'requires' | 'locked';
+export type BuyError = 'unknown' | 'owned' | 'funds' | 'requires' | 'locked' | 'expired';
 
-export function canBuy(state: AppState, itemId: string): BuyError | null {
+export function canBuy(state: AppState, itemId: string, now = Date.now()): BuyError | null {
   const item = itemById(itemId);
   if (!item) return 'unknown';
   if (owns(state, itemId)) return 'owned';
   if (item.achievement) return 'locked';
+  if (!isAvailable(item, now)) return 'expired';
   if (item.requires && !owns(state, item.requires)) return 'requires';
   if (balance(state) < item.price) return 'funds';
   return null;
 }
 
 export function buy(state: AppState, itemId: string, now: number): { state: AppState; error: BuyError | null; unlocked: string[] } {
-  const error = canBuy(state, itemId);
+  const error = canBuy(state, itemId, now);
   if (error) return { state, error, unlocked: [] };
   const item = itemById(itemId)!;
   const next = equip({ ...state, purchases: [...state.purchases, { id: uid(), itemId, price: item.price, at: now }] }, itemId, now);
@@ -197,6 +213,39 @@ export function equippedItems(state: AppState): Set<string> {
 
 export function updateSettings(state: AppState, patch: Partial<Settings>, now: number): AppState {
   return { ...state, settings: { ...state.settings, ...patch }, settingsUpdatedAt: now };
+}
+
+export function updateProfile(state: AppState, patch: Partial<Profile>, now: number): AppState {
+  return { ...state, profile: normalizeProfile({ ...state.profile, ...patch }), profileUpdatedAt: now };
+}
+
+/** Grant a one-off reward. No-op if this id was already claimed (on any device). */
+export function claimBonus(state: AppState, bonus: Omit<Bonus, 'at'>, now: number): { state: AppState; claimed: boolean } {
+  if (state.bonuses.some((b) => b.id === bonus.id)) return { state, claimed: false };
+  return { state: { ...state, bonuses: [...state.bonuses, { ...bonus, at: now }] }, claimed: true };
+}
+
+export function hasBonus(state: AppState, id: string): boolean {
+  return state.bonuses.some((b) => b.id === id);
+}
+
+/** Attach a subject / note to a finished session (only right after it ends, before it syncs elsewhere). */
+export function annotateSession(state: AppState, id: string, patch: { subject?: string; note?: string }): AppState {
+  const clean = {
+    subject: patch.subject?.trim().slice(0, 40) || undefined,
+    note: patch.note?.trim().slice(0, 500) || undefined,
+  };
+  return { ...state, sessions: state.sessions.map((s) => (s.id === id ? { ...s, ...clean } : s)) };
+}
+
+export function addFriend(state: AppState, code: string, name: string, now: number): AppState {
+  const c = code.trim().toUpperCase();
+  if (!c || state.friends.some((f) => f.code === c)) return state;
+  return { ...state, friends: [...state.friends, { code: c, name: name.slice(0, 24), addedAt: now }], friendsUpdatedAt: now };
+}
+
+export function removeFriend(state: AppState, code: string, now: number): AppState {
+  return { ...state, friends: state.friends.filter((f) => f.code !== code), friendsUpdatedAt: now };
 }
 
 // re-exported for convenience

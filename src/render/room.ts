@@ -2,6 +2,7 @@ import { Painter, W, H } from './pixel';
 import { Outside, skyAt, type Sky } from './outside';
 import { drawCharacter, poseFor, activityFor, MUG, type Pose, type Activity } from './character';
 import { ITEM_LIST, type ArtCtx, type Layer } from './items';
+import type { HitTarget } from './scene';
 import { WIN, FLOOR_Y, DESK, CABINET, STAND_LIFT, mainMonitor, type RenderEvents, type RenderScene } from './scene';
 
 const { x: WX, y: WY, w: WW, h: WH } = WIN;
@@ -71,6 +72,22 @@ export class RoomRenderer {
 
   setEvents(ev: RenderEvents) {
     this.events = ev;
+  }
+
+  /**
+   * What's at logical pixel (x, y) of the 240x150 canvas, using the last rendered scene
+   * (so moving pets / world events are hit where they currently are). TODO(room agent): implement.
+   */
+  hitTest(_x: number, _y: number): HitTarget | null {
+    return null;
+  }
+
+  /** React to a tap on `target` (wave, purr, sip…) starting at animation time `time`. TODO(room agent). */
+  interact(_target: HitTarget, _time: number): void {}
+
+  /** Where to anchor a speech bubble for `target` (logical px, top-centre of the thing), or null if not visible. */
+  anchor(_target: HitTarget | 'buddy'): { x: number; y: number } | null {
+    return { x: 150, y: 52 };
   }
 
   render(s: RenderScene) {
