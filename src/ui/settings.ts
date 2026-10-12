@@ -284,13 +284,21 @@ export function createSettingsView(ctx: Ctx) {
       h('div', { class: 'view-head' }, h('h2', null, 'Settings')),
       section(
         'Sound',
-        toggle('Sound effects', 'Coins, chimes, rain and the little room sounds', s.sound, (v) => {
-          void ctx.audio.unlock();
-          update({ sound: v });
-        }),
         toggle('Lo-fi music', 'Soft generated beats while you study', s.music, (v) => {
           void ctx.audio.unlock();
           update({ music: v });
+        }),
+        toggle('Keyboard typing', 'Soft key clicks while he works', s.typing, (v) => {
+          void ctx.audio.unlock();
+          update({ typing: v });
+        }),
+        toggle('Ambience', 'Rain, birds, passing cars and pets', s.ambience, (v) => {
+          void ctx.audio.unlock();
+          update({ ambience: v });
+        }),
+        toggle('Sound effects', 'Coins, chimes and button sounds', s.sound, (v) => {
+          void ctx.audio.unlock();
+          update({ sound: v });
         }),
         h('label', { class: 'row' }, h('span', { class: 'row-text' }, 'Volume'), vol),
       ),

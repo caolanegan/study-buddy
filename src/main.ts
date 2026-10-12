@@ -73,6 +73,23 @@ const nav = h(
     return b;
   }),
 );
+// Desktop: the side panel can be collapsed so the room takes over the screen.
+const collapseBtn = h(
+  'button',
+  { type: 'button', class: 'panel-toggle', title: 'Hide panel ( \\ )', 'aria-label': 'Hide side panel', onclick: () => setCollapsed(true) },
+  '⟩',
+);
+const expandBtn = h(
+  'button',
+  { type: 'button', class: 'panel-expand', title: 'Show panel ( \\ )', 'aria-label': 'Show side panel', onclick: () => setCollapsed(false) },
+  h('span', { 'aria-hidden': 'true' }, '⟨'),
+  h('span', null, 'Shop · Stats · More'),
+);
+function setCollapsed(c: boolean) {
+  prefs.panelCollapsed = c;
+  savePrefs(prefs);
+  app.classList.toggle('panel-collapsed', c);
+}
 const app = h(
   'div',
   { class: 'app' },
@@ -81,10 +98,12 @@ const app = h(
     'main',
     { class: 'layout' },
     h('div', { class: 'col-left' }, room.stage, room.panel),
-    h('div', { class: 'col-right' }, nav, Object.values(views).map((v) => v.el)),
+    h('div', { class: 'col-right' }, h('div', { class: 'nav-row' }, nav, collapseBtn), Object.values(views).map((v) => v.el)),
   ),
+  expandBtn,
 );
 document.body.append(app, modalRoot, toastRoot);
+app.classList.toggle('panel-collapsed', prefs.panelCollapsed);
 
 function effectiveTab(): Tab {
   return wideMq.matches && prefs.tab === 'room' ? 'shop' : prefs.tab;
@@ -115,7 +134,7 @@ function renderVisibleView() {
 
 // ───────────── audio ─────────────
 function applyAudioSettings(s: AppState) {
-  audio.setEnabled({ sfx: s.settings.sound, music: s.settings.music });
+  audio.setEnabled({ sfx: s.settings.sound, music: s.settings.music, typing: s.settings.typing, ambience: s.settings.ambience });
   audio.setVolume(document.hidden ? 0 : s.settings.volume);
 }
 applyAudioSettings(store.get());
@@ -130,7 +149,8 @@ document.addEventListener('pointerdown', unlockAudio, { capture: true });
 document.addEventListener('keydown', unlockAudio, { capture: true });
 
 const renderer = new RoomRenderer(room.canvas, {
-  onCar: (dir) => audio.play('car', { dir }),
+  // not every car: a passing car every few minutes is atmosphere, every few seconds is traffic
+  onCar: (dir) => Math.random() < 0.3 && audio.play('car', { dir }),
   onThunder: () => audio.play('thunder'),
   onPet: (p) => audio.play(p === 'cat' ? 'meow' : 'bark'),
 });
@@ -299,6 +319,11 @@ document.addEventListener('keydown', (e) => {
   if (isTypingTarget(t) || (t && t.closest('button, a, [role="switch"], [role="tab"]'))) return;
   e.preventDefault();
   sc.primary();
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key !== '\\' || e.metaKey || e.ctrlKey || e.altKey || modalOpen() || isTypingTarget(e.target as HTMLElement | null)) return;
+  if (wideMq.matches) setCollapsed(!prefs.panelCollapsed);
 });
 
 // ───────────── start ─────────────

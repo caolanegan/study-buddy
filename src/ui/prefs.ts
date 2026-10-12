@@ -14,10 +14,12 @@ export interface Prefs {
   tab: Tab;
   pomodoro: boolean;
   shopCategory: Category;
+  /** Desktop: hide the side panel so the room fills the screen. */
+  panelCollapsed: boolean;
 }
 
 const KEY = 'study-buddy:ui';
-const DEFAULTS: Prefs = { tab: 'room', pomodoro: false, shopCategory: 'computer' };
+const DEFAULTS: Prefs = { tab: 'room', pomodoro: false, shopCategory: 'computer', panelCollapsed: false };
 
 export function loadPrefs(): Prefs {
   try {

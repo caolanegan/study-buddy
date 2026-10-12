@@ -54,7 +54,7 @@ export function poseFor(s: RenderScene): Pose {
 }
 
 /** Mug position on the desk (moves to his hand while sipping). */
-export const MUG = { x: 214, y: 76 };
+export const MUG = { x: 171, y: 76 };
 
 /** Head centre when sitting on the sofa / beanbag / floor. */
 export const SOFA_HEAD = { x: SOFA.x + 31, y: 110 };

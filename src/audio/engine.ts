@@ -50,6 +50,9 @@ export type Sfx =
   | 'click'
   | 'checkin';
 
+/** Sounds that belong to the world (gated by the ambience switch, not UI effects). */
+const AMBIENT_SFX = new Set<Sfx>(['thunder', 'car', 'meow', 'bark']);
+
 export const SFX_NAMES: readonly Sfx[] = [
   'coin', 'achievement', 'purchase', 'chime', 'start', 'pause', 'end',
   'thunder', 'car', 'meow', 'bark', 'click', 'checkin',
@@ -255,6 +258,8 @@ export class AudioEngine {
   private volume = 0.8;
   private sfxOn = true;
   private musicOn = true;
+  private typingOn = true;
+  private ambienceOn = true;
   private scene: AudioScene | null = null;
 
   // graph
@@ -346,10 +351,16 @@ export class AudioEngine {
     if (this.ctx) this.ramp(this.master.gain, this.volume * MASTER_LEVEL, 0.08);
   }
 
-  setEnabled(opts: { sfx: boolean; music: boolean }): void {
+  /**
+   * sfx = UI effects (coins, chimes…), music = lo-fi, typing = keyboard clicks,
+   * ambience = rain/weather loops, outdoor & pet sounds. typing/ambience default to `sfx` when omitted.
+   */
+  setEnabled(opts: { sfx: boolean; music: boolean; typing?: boolean; ambience?: boolean }): void {
     const musicWas = this.musicOn;
     this.sfxOn = !!opts.sfx;
     this.musicOn = !!opts.music;
+    this.typingOn = opts.typing ?? !!opts.sfx;
+    this.ambienceOn = opts.ambience ?? !!opts.sfx;
     if (!this.ctx) return;
     if (this.musicOn && !musicWas) this.musicRunning = false; // restart cleanly
     this.applyScene();
@@ -364,7 +375,8 @@ export class AudioEngine {
   }
 
   play(name: Sfx, opts: PlayOptions = {}): void {
-    if (!this.ctx || !this.sfxOn || !this.isLive()) return;
+    if (!this.ctx || !this.isLive()) return;
+    if (!(AMBIENT_SFX.has(name) ? this.ambienceOn : this.sfxOn)) return;
     const t = this.now() + 0.01 + Math.max(0, opts.delay ?? 0);
     try {
       this.playAt(name, t, opts);
@@ -574,7 +586,7 @@ export class AudioEngine {
 
     this.ramp(this.musicBus.gain, this.musicOn ? MUSIC_LEVEL[mode] : 0, 1.0);
     this.ramp(this.drumBus.gain, mode === 'full' ? 0.85 : 0, 1.0);
-    this.ramp(this.ambBus.gain, this.sfxOn ? AMB_LEVEL : 0, 0.5);
+    this.ramp(this.ambBus.gain, this.ambienceOn || this.typingOn ? AMB_LEVEL : 0, 0.5);
     this.ramp(this.sfxBus.gain, this.sfxOn ? SFX_LEVEL : 0, 0.05);
 
     const snow = s?.weather === 'snow';
@@ -584,7 +596,7 @@ export class AudioEngine {
 
     this.setLoop('crackle', this.musicOn ? 1 : 0);
     const levels: Record<LoopId, number> =
-      s && this.sfxOn ? loopLevels(s) : { rain: 0, crickets: 0, wind: 0, bubbles: 0 };
+      s && this.ambienceOn ? loopLevels(s) : { rain: 0, crickets: 0, wind: 0, bubbles: 0 };
     for (const id of Object.keys(levels) as LoopId[]) this.setLoop(id, levels[id]);
 
     if (!this.musicOn) this.musicRunning = false;
@@ -610,8 +622,9 @@ export class AudioEngine {
       const h = horizon ?? n + LOOKAHEAD;
       if (this.musicOn) this.scheduleMusic(n, h);
       const s = this.scene;
-      if (!s || !this.sfxOn) return;
-      this.scheduleTyping(s, n, h);
+      if (!s) return;
+      if (this.typingOn) this.scheduleTyping(s, n, h);
+      if (!this.ambienceOn) return;
       this.scheduleLoopEvents(n, h);
       this.scheduleAmbience(s, n);
     } catch (e) {
@@ -714,7 +727,7 @@ export class AudioEngine {
       case 'owl': return this.owl(t);
       case 'wind': return this.windGust(t);
       case 'distant-dog': return this.bark(t, true);
-      case 'car': return this.car(t, this.rnd() < 0.5 ? 1 : -1, 0.55);
+      case 'car': return this.car(t, this.rnd() < 0.5 ? 1 : -1, 0.25);
       case 'mug': return this.mug(t);
       case 'page': return this.page(t);
       case 'clock': return this.clock(t);
@@ -1254,7 +1267,7 @@ export class AudioEngine {
         this.thunder(t);
         break;
       case 'car':
-        this.car(t, opts.dir ?? (r() < 0.5 ? 1 : -1), 1);
+        this.car(t, opts.dir ?? (r() < 0.5 ? 1 : -1), 0.4);
         break;
       case 'meow':
         this.meow(t, 1);

@@ -52,8 +52,13 @@ export interface Purchase {
 }
 
 export interface Settings {
+  /** UI sound effects (coins, chimes, clicks). */
   sound: boolean;
   music: boolean;
+  /** Keyboard clicks while studying. */
+  typing: boolean;
+  /** Weather, outdoor and pet sounds. */
+  ambience: boolean;
   volume: number; // 0..1
   pomodoroWorkMin: number;
   pomodoroBreakMin: number;

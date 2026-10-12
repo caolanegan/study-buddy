@@ -20,6 +20,8 @@ export const MIN_SESSION_MS = MIN;
 export const DEFAULT_SETTINGS: Settings = {
   sound: true,
   music: false,
+  typing: true,
+  ambience: true,
   volume: 0.6,
   pomodoroWorkMin: 25,
   pomodoroBreakMin: 5,
