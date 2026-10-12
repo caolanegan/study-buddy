@@ -10,10 +10,15 @@ import { ITEMS, daysLeft, isAvailable, itemById, nextAvailable } from '../src/co
 import { mergeStates } from '../src/core/merge';
 import { buildRow, friendCode, normalizeCode, rankEntries, weekMs, _test as LB } from '../src/sync/leaderboard';
 import { HOUR, MIN } from '../src/core/time';
+import type { AppState } from '../src/core/types';
 
 const T0 = new Date(2026, 9, 12, 10, 0, 0).getTime(); // Mon 12 Oct 2026, 10:00
 // (manual sessions: a live session longer than an hour would hit the still-studying check)
-const studied = (s: ReturnType<typeof A.defaultState>, at: number, ms: number) => A.addManualSession(s, at, ms, at + ms).state;
+// (manual time doesn't count toward quests/boards, so mark these as normal sessions)
+const studied = (s: AppState, at: number, ms: number): AppState => {
+  const st = A.addManualSession(s, at, ms, at + ms).state;
+  return { ...st, sessions: st.sessions.map((x) => ({ ...x, manual: undefined })) };
+};
 
 describe('profile', () => {
   it('defaults and repairs bad data', () => {
@@ -184,6 +189,8 @@ describe('leaderboard helpers', () => {
     let s = studied(A.defaultState(), T0, 2 * HOUR - 1);
     s = studied(s, T0 - 3 * 24 * HOUR, HOUR); // previous week (Fri)
     expect(weekMs(s, T0 + 3 * HOUR)).toBe(2 * HOUR - 1);
+    // manually logged time doesn't count on the boards
+    expect(weekMs({ ...s, sessions: s.sessions.map((x) => ({ ...x, manual: true })) }, T0 + 3 * HOUR)).toBe(0);
     const row = buildRow(s, 'a1b2c3d4-0000', 3 * HOUR, T0 + 3 * HOUR);
     expect(row.code).toBe('A1B2-C3D4');
     expect(row.is_public).toBe(false);

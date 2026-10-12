@@ -21,6 +21,7 @@ export function hash01(n: number): number {
 
 /** Weather changes every half sim-day (i.e. every 30 study minutes). */
 export function weatherAt(totalStudiedMs: number): Weather {
+  if (!Number.isFinite(totalStudiedMs)) return 'clear';
   const halfDay = Math.floor((Math.max(0, totalStudiedMs) / HOUR) * 2);
   const season = Math.floor(halfDay / 2 / SEASON_DAYS) % 4;
   let r = hash01(halfDay);
@@ -33,5 +34,6 @@ export function weatherAt(totalStudiedMs: number): Weather {
 
 /** 0 = new moon, 0.5 = full moon; an 8-day lunar cycle. */
 export function moonPhase(totalStudiedMs: number): number {
+  if (!Number.isFinite(totalStudiedMs)) return 0.5;
   return ((Math.floor(totalStudiedMs / HOUR) % 8) / 8);
 }

@@ -243,7 +243,8 @@ store.subscribe((s, prev) => {
   if (s.sessions !== prev.sessions || s.purchases !== prev.purchases || s.bonuses !== prev.bonuses || s.friends !== prev.friends) {
     const ev = actions.evaluateAchievements(s, Date.now());
     if (ev.unlocked.length) {
-      queueMicrotask(() => store.set(ev.state));
+      // re-evaluate against the latest state at write time (don't clobber anything set in between)
+      queueMicrotask(() => store.set((cur) => actions.evaluateAchievements(cur, Date.now()).state));
       return;
     }
   }
@@ -272,7 +273,7 @@ header.setSync(cloud.status);
 {
   const ev = actions.evaluateAchievements(store.get(), Date.now());
   // deferred: the store reaction calls updateDom(), whose state is declared further down this module
-  if (ev.unlocked.length) queueMicrotask(() => store.set(ev.state));
+  if (ev.unlocked.length) queueMicrotask(() => store.set((cur) => actions.evaluateAchievements(cur, Date.now()).state));
 }
 void cloud.configure(loadSyncConfig());
 startSocial(ctx);
@@ -291,11 +292,18 @@ function items(s: AppState) {
 let lastDom = 0;
 // ───────────── milestones (new sim day / season / year, every 10 hours) ─────────────
 let milestoneTotal = -1;
+let milestoneBest = -1;
 function checkMilestones(total: number, studying: boolean) {
   const prevTotal = milestoneTotal;
   milestoneTotal = total;
   if (prevTotal < 0 || total <= prevTotal) return;
-  const m = studying ? simMilestone(prevTotal, total) : hoursMilestone(prevTotal, total);
+  // never celebrate the same ground twice (e.g. delete a session, then study past the boundary again)
+  const best = milestoneBest;
+  milestoneBest = Math.max(milestoneBest, total);
+  if (total <= best) return;
+  // live transitions only creep forward; a big jump while studying is a sync merge, not a sunrise
+  if (studying && total - prevTotal > 10_000) return;
+  const m = studying ? simMilestone(Math.max(prevTotal, best), total) : hoursMilestone(Math.max(prevTotal, best), total);
   if (!m) return;
   const t = toast(m.text, m.icon, m.big ? 6000 : 3500, 'milestone');
   if (m.big) {
@@ -342,7 +350,8 @@ function frame() {
     studiedHours: total / 3_600_000,
     realNow: now,
   });
-  renderer.render(scene);
+  // The customise / onboarding sheet has its own live preview and covers the room: don't draw both.
+  if (!modalRoot.querySelector('.modal.customize')) renderer.render(scene);
   world.frame(now, scene);
   if (now - lastDom >= 250) updateDom(now);
   if (now - lastAudio >= 1000) {

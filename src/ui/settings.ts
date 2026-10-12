@@ -1,4 +1,5 @@
 // Settings: sound, timer, notifications, cloud sync, data.
+import { unpublishNow } from './social';
 import * as actions from '../core/actions';
 import type { Settings } from '../core/types';
 import { loadSyncConfig, saveSyncConfig } from '../sync/cloud';
@@ -253,7 +254,11 @@ export function createSettingsView(ctx: Ctx) {
             onclick: async () => {
               if (!(await confirmDialog('Reset all data?', 'This deletes every session, coin, purchase and achievement on this device.', 'Continue', true))) return;
               if (!(await confirmDialog('Are you absolutely sure?', 'There is no undo. Export a backup first if you might want it back.', 'Reset everything', true))) return;
-              if (ctx.cloud.email) await ctx.cloud.signOut().catch(() => {});
+              if (ctx.cloud.email) {
+                // take me off the leaderboards first (needs to be signed in)
+                await unpublishNow().catch(() => {});
+                await ctx.cloud.signOut().catch(() => {});
+              }
               ctx.store.set(actions.defaultState());
               clearPrefs();
               toast('All data reset', '🧹');

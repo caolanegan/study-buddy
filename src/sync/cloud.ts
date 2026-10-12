@@ -1,7 +1,7 @@
 import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
 import type { AppState } from '../core/types';
 import { normalize } from '../core/actions';
-import { mergeStates } from '../core/merge';
+import { mergeStates, sameState } from '../core/merge';
 import type { Store } from '../state/store';
 
 export interface SyncConfig {
@@ -46,11 +46,42 @@ export interface Remote {
  * One pull-merge-push round. Because merge is a union of append-only logs,
  * concurrent rounds from two devices converge on the next round.
  */
-export async function syncOnce(local: AppState, remote: Remote): Promise<AppState> {
-  const theirs = await remote.fetch();
-  const merged = theirs ? mergeStates(local, normalize(theirs)) : local;
-  if (!theirs || JSON.stringify(merged) !== JSON.stringify(normalize(theirs))) await remote.push(merged);
+export async function syncOnce(local: AppState, remote: Remote, opts: { accountSwitched?: boolean } = {}): Promise<AppState> {
+  const raw = await remote.fetch();
+  const theirs = raw ? normalize(raw) : null;
+  let mine = local;
+  if (opts.accountSwitched) {
+    // This device's data belongs to the previous account (already in its cloud row): don't leak it into this one.
+    mine = theirs ?? normalize(null);
+  } else if (theirs && isFreshDevice(local) && theirs.profile.onboarded) {
+    // A brand-new device shouldn't overwrite the account's buddy/room with first-run defaults.
+    mine = { ...local, profile: theirs.profile, profileUpdatedAt: theirs.profileUpdatedAt };
+  }
+  const merged = theirs ? mergeStates(mine, theirs) : mine;
+  // compare canonically: Postgres jsonb doesn't keep key order, so a plain stringify would push every round
+  if (!theirs || !sameState(merged, theirs)) await remote.push(merged);
   return merged;
+}
+
+/** Nothing studied, bought or claimed yet on this device. */
+export function isFreshDevice(s: AppState): boolean {
+  return !s.sessions.length && !s.purchases.length && !s.bonuses.length && !s.active;
+}
+
+const LAST_UID_KEY = 'study-buddy:sync-uid';
+function lastSyncedUid(): string | null {
+  try {
+    return localStorage.getItem(LAST_UID_KEY);
+  } catch {
+    return null;
+  }
+}
+function rememberUid(uid: string) {
+  try {
+    localStorage.setItem(LAST_UID_KEY, uid);
+  } catch {
+    /* ignore */
+  }
 }
 
 export class CloudSync {
@@ -67,6 +98,9 @@ export class CloudSync {
   private again = false;
   private listeners = new Set<() => void>();
   private applyingRemote = false;
+  private loopUid: string | null = null;
+  private channelSeq = 0;
+  private lastPushAt: string | null = null;
 
   constructor(private store: Store) {
     store.subscribe(() => {
@@ -156,25 +190,36 @@ export class CloudSync {
         return (data?.data as AppState | undefined) ?? null;
       },
       push: async (state) => {
-        const { error } = await client.from('study_state').upsert({ user_id: userId, data: state, updated_at: new Date().toISOString() });
+        const at = new Date().toISOString();
+        this.lastPushAt = at;
+        const { error } = await client.from('study_state').upsert({ user_id: userId, data: state, updated_at: at });
         if (error) throw error;
       },
     };
   }
 
   private startLoop() {
+    // auth fires INITIAL_SESSION and getSession() resolves too: don't tear down a loop that's already running for this user
+    if (this.timer && this.loopUid === this.userId) return;
     this.stop();
+    this.loopUid = this.userId;
     void this.syncNow();
     this.timer = setInterval(() => void this.syncNow(), POLL_MS);
     if (this.client && this.userId) {
       this.channel = this.client
-        .channel('study_state_' + this.userId)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'study_state', filter: `user_id=eq.${this.userId}` }, () => void this.syncNow())
+        .channel(`study_state_${this.userId}_${++this.channelSeq}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'study_state', filter: `user_id=eq.${this.userId}` }, (payload) => {
+          // ignore the echo of our own push
+          const at = (payload.new as { updated_at?: string } | undefined)?.updated_at;
+          if (at && at === this.lastPushAt) return;
+          void this.syncNow();
+        })
         .subscribe();
     }
   }
 
   stop() {
+    this.loopUid = null;
     if (this.timer) clearInterval(this.timer);
     if (this.pushTimer) clearTimeout(this.pushTimer);
     this.timer = this.pushTimer = null;
@@ -197,10 +242,15 @@ export class CloudSync {
     this.running = true;
     this.setStatus('syncing');
     try {
-      const merged = await syncOnce(this.store.get(), this.remote());
+      const uid = this.userId;
+      const prev = lastSyncedUid();
+      const accountSwitched = !!prev && prev !== uid;
+      const merged = await syncOnce(this.store.get(), this.remote(), { accountSwitched });
       this.applyingRemote = true;
-      this.store.mergeIn(merged);
+      if (accountSwitched) this.store.set(merged);
+      else this.store.mergeIn(merged);
       this.applyingRemote = false;
+      rememberUid(uid);
       this.lastSyncedAt = Date.now();
       this.setStatus('synced');
     } catch (e) {

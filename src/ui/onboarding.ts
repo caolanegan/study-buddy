@@ -80,7 +80,11 @@ export function openOnboarding(ctx: Ctx, onDone?: () => void) {
     done = true;
     const s = ctx.store.get();
     if (!draft.appearance.name.trim()) draft.appearance.name = s.profile.appearance.name;
-    ctx.store.set(actions.updateProfile(s, { appearance: draft.appearance, room: draft.room, onboarded: true }, ctx.now()));
+    const next = actions.updateProfile(s, { appearance: draft.appearance, room: draft.room, onboarded: true }, ctx.now());
+    // Nothing picked (skipped / clicked straight through): keep the old timestamp, so a buddy customised on
+    // another device still wins when sync merges — a new device mustn't overwrite it with the defaults.
+    const unchanged = JSON.stringify(next.profile.appearance) === JSON.stringify(s.profile.appearance) && JSON.stringify(next.profile.room) === JSON.stringify(s.profile.room);
+    ctx.store.set(unchanged ? { ...next, profileUpdatedAt: s.profileUpdatedAt } : next);
     m.close();
     ctx.audio.play('chime');
     onDone?.();

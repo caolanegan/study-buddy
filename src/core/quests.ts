@@ -92,7 +92,8 @@ function statsFor(state: AppState, now: number, days: string[]): DayStats {
     if (h < 9 && h >= 4) d.earlyMs += inRange;
     if (h >= 20) d.lateMs += inRange;
   };
-  for (const s of state.sessions) consider(s.start, s.byDay, s.activeMs, s.pomodoros);
+  // manually logged time doesn't count toward quests (log-claim-delete would be a coin faucet)
+  for (const s of state.sessions) if (!s.manual) consider(s.start, s.byDay, s.activeMs, s.pomodoros);
   if (state.active) consider(state.active.startedAt, activeByDay(state.active, now), activeMs(state.active, now), state.active.pomodoro?.completed ?? 0);
   d.daysStudied = Object.values(perDay).filter((v) => v >= 15 * MIN).length;
   return d;

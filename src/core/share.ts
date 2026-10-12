@@ -45,16 +45,25 @@ export function encodeSnapshot(s: RoomSnapshot): string {
   return toBase64Url(JSON.stringify({ v: 1, l: s.look, r: s.room, i: s.items, h: s.hours, s: s.streak }));
 }
 
+/** Repair an untrusted snapshot-shaped object (share link, leaderboard row). Returns null if unusable. */
+export function sanitizeSnapshot(raw: unknown): RoomSnapshot | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const prof = normalizeProfile({ appearance: r.look ?? r.l, room: r.room ?? r.r });
+  const known = new Set(ITEMS.map((i) => i.id));
+  const rawItems = r.items ?? r.i;
+  const items = Array.isArray(rawItems) ? [...new Set(rawItems.filter((x: unknown): x is string => typeof x === 'string' && known.has(x)))].slice(0, 80) : [];
+  const num = (x: unknown, max: number) => (typeof x === 'number' && Number.isFinite(x) ? Math.max(0, Math.min(max, x)) : 0);
+  return { v: 1, look: prof.appearance, room: prof.room, items, hours: num(r.hours ?? r.h, 1e6), streak: Math.floor(num(r.streak ?? r.s, 1e5)) };
+}
+
 /** Parse and sanitise a snapshot from an untrusted link. Returns null if it's not one. */
 export function decodeSnapshot(code: string): RoomSnapshot | null {
   try {
+    if (code.length > 8000) return null;
     const raw = JSON.parse(fromBase64Url(code.trim()));
     if (!raw || raw.v !== 1) return null;
-    const prof = normalizeProfile({ appearance: raw.l, room: raw.r });
-    const known = new Set(ITEMS.map((i) => i.id));
-    const items = Array.isArray(raw.i) ? raw.i.filter((x: unknown): x is string => typeof x === 'string' && known.has(x)).slice(0, 80) : [];
-    const num = (x: unknown, max: number) => (typeof x === 'number' && Number.isFinite(x) ? Math.max(0, Math.min(max, x)) : 0);
-    return { v: 1, look: prof.appearance, room: prof.room, items, hours: num(raw.h, 1e6), streak: Math.floor(num(raw.s, 1e5)) };
+    return sanitizeSnapshot(raw);
   } catch {
     return null;
   }

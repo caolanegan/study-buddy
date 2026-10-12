@@ -19,6 +19,8 @@ export interface SceneOpts {
   /** Show a bright daytime moment of the current sim day (nice for previews). */
   daytime?: boolean;
   time?: number;
+  /** Drop these item ids from the scene (e.g. hats in a hair-style portrait). */
+  without?: (id: string) => boolean;
 }
 
 /** A render scene for the user's own room, optionally with a different look / room style. */
@@ -32,7 +34,7 @@ export function sceneFor(state: AppState, now: number, o: SceneOpts = {}): Rende
     weather: o.daytime && (weather === 'storm' || weather === 'fog') ? 'cloudy' : weather,
     moon: moonPhase(total),
     mode: o.mode ?? 'idle',
-    items: equippedItems(state),
+    items: o.without ? new Set([...equippedItems(state)].filter((id) => !o.without!(id))) : equippedItems(state),
     look: o.look ?? state.profile.appearance,
     room: o.room ?? state.profile.room,
     studiedHours: total / HOUR,

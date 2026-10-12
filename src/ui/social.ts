@@ -93,6 +93,7 @@ export async function publishNow(force = false): Promise<void> {
   pub.busy = true;
   try {
     await be.publish(row);
+    markRow(true);
     pub.lastSig = sig;
     pub.lastAt = now;
     pub.error = null;
@@ -110,13 +111,42 @@ export async function publishNow(force = false): Promise<void> {
   }
 }
 
+/** Remember whether a row of mine may exist on the server, so an opt-out that failed (offline) is retried later. */
+const ROW_KEY = 'study-buddy:lb-row';
+function markRow(exists: boolean) {
+  try {
+    if (exists) localStorage.setItem(ROW_KEY, '1');
+    else localStorage.removeItem(ROW_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+function rowMayExist(): boolean {
+  try {
+    return localStorage.getItem(ROW_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/** If I've opted out but my row might still be up (a failed delete, reset…), delete it. Idempotent. */
+export async function ensureUnpublished(): Promise<void> {
+  const ctx = started;
+  if (!ctx || ctx.store.get().settings.leaderboard || !rowMayExist()) return;
+  await unpublishNow();
+}
+
 export async function unpublishNow(): Promise<void> {
   const ctx = started;
   if (!ctx) return;
   const be = socialBackend(ctx);
   if (!be.userId()) return;
+  // don't let an in-flight publish land after the delete
+  for (let i = 0; pub.busy && i < 50; i++) await new Promise((r) => setTimeout(r, 100));
+  pub.queued = null;
   try {
     await be.unpublish();
+    markRow(false);
     pub.lastSig = null;
     pub.error = null;
   } catch (e) {
@@ -149,12 +179,18 @@ export function startSocial(ctx: Ctx): void {
   let wasSignedIn = !!socialBackend(ctx).userId();
   ctx.cloud.onChange(() => {
     const now = !!socialBackend(ctx).userId();
-    if (now && !wasSignedIn) void publishNow(true);
+    if (now && !wasSignedIn) {
+      if (ctx.store.get().settings.leaderboard) void publishNow(true);
+      else void ensureUnpublished();
+    }
     wasSignedIn = now;
   });
   // periodic refresh while the app is open (throttled to every 5 minutes inside publishNow)
   setInterval(() => {
-    if (!document.hidden) void publishNow(false);
+    if (document.hidden) return;
+    if (ctx.store.get().settings.leaderboard) void publishNow(false);
+    else void ensureUnpublished();
   }, 60_000);
   void publishNow(true);
+  void ensureUnpublished();
 }

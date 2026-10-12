@@ -230,7 +230,9 @@ export function createStatsView(ctx: Ctx) {
             }
             const r = actions.addManualSession(ctx.store.get(), start, dur, nowTs);
             if (!r.session) {
-              err.textContent = 'That session couldn’t be added.';
+              err.textContent = actions.overlapsExisting(ctx.store.get(), start, start + dur)
+                ? 'That overlaps a session you already logged.'
+                : 'That session couldn’t be added.';
               return false;
             }
             ctx.store.set(r.state);

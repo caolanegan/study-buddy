@@ -41,8 +41,10 @@ import { shopButton } from '../src/ui/viewmodel';
 const T0 = new Date(2026, 9, 12, 15, 0, 0).getTime(); // Mon 12 Oct 2026, 15:00 local
 const at = (y: number, m: number, d: number, hh = 12) => new Date(y, m - 1, d, hh).getTime();
 
+/** A logged session that counts like a live one (manual time is excluded from quests). */
 function manual(state: AppState, start: number, ms: number, now = T0): AppState {
-  return A.addManualSession(state, start, ms, now).state;
+  const s = A.addManualSession(state, start, ms, now).state;
+  return { ...s, sessions: s.sessions.map((x) => ({ ...x, manual: undefined })) };
 }
 
 function quest(defId: string, scope: 'daily' | 'weekly', state: AppState, now = T0): QuestView | undefined {

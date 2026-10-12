@@ -105,7 +105,9 @@ export function openModal(opts: ModalOptions): ModalHandle {
   };
   stack.push({ handle, opts });
   root.appendChild(backdrop);
-  const focusTarget = actions.find((x) => x.a.autofocus)?.b ?? card.querySelector<HTMLElement>('input, select') ?? actions[actions.length - 1]?.b;
+  // Don't focus a text field on touch screens: it pops the keyboard / date wheel over the sheet straight away.
+  const field = matchMedia('(pointer: fine)').matches ? card.querySelector<HTMLElement>('input, select') : null;
+  const focusTarget = actions.find((x) => x.a.autofocus)?.b ?? field ?? actions[actions.length - 1]?.b;
   requestAnimationFrame(() => focusTarget?.focus({ preventScroll: true }));
   return handle;
 }

@@ -1,6 +1,6 @@
 import type { AppState } from '../core/types';
 import { normalize } from '../core/actions';
-import { mergeStates } from '../core/merge';
+import { mergeStates, sameState } from '../core/merge';
 
 export const STORAGE_KEY = 'study-buddy:v1';
 
@@ -60,7 +60,7 @@ export class Store {
   /** Merge another copy of the state (cloud, other tab, import). */
   mergeIn(other: AppState): void {
     const merged = mergeStates(this.state, normalize(other));
-    if (JSON.stringify(merged) !== JSON.stringify(this.state)) this.set(merged);
+    if (!sameState(merged, this.state)) this.set(merged);
   }
 
   subscribe(fn: Listener): () => void {

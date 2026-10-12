@@ -78,7 +78,11 @@ export function createWorld(ctx: Ctx, d: { room: RoomView; renderer: RoomRendere
     return v ? { ...c, name: v.look.name, view: v.room.view, streak: v.streak, todayMin: 0, sessionMin: 30, goalMin: 60 } : c;
   };
   const chatty = () => store.get().settings.bubbles !== false && !document.hidden;
-  const buddy = createBuddy(ctx, { overlay, canvas, renderer, context, chatty });
+  const avoid = () => {
+    const el = stageBtns;
+    return el.offsetWidth ? { left: el.offsetLeft, top: el.offsetTop, width: el.offsetWidth, height: el.offsetHeight } : null;
+  };
+  const buddy = createBuddy(ctx, { overlay, canvas, renderer, context, chatty, avoid });
   const chatter = new Chatter();
   buddy.onSaid = (now) => chatter.bump(now);
 
@@ -111,7 +115,8 @@ export function createWorld(ctx: Ctx, d: { room: RoomView; renderer: RoomRendere
   const customize = (tab?: 'character' | 'room') => openCustomize(ctx, { tab, onShare: share });
   const editBtn = h('button', { type: 'button', class: 'stage-btn', 'aria-label': 'Customise your buddy and room', title: 'Customise', onclick: () => customize() }, '✏️');
   const zenBtn = h('button', { type: 'button', class: 'stage-btn', 'aria-label': 'Zen mode (F)', title: 'Zen mode (F)', onclick: () => zen.toggle() }, h('span', { class: 'zen-ico', 'aria-hidden': 'true' }));
-  overlay.append(h('div', { class: 'stage-btns' }, editBtn, zenBtn));
+  const stageBtns = h('div', { class: 'stage-btns' }, editBtn, zenBtn);
+  overlay.append(stageBtns);
   const zen = createZen(stage, sc);
 
   // services for the other views (Settings, Friends)
@@ -221,12 +226,15 @@ export function createWorld(ctx: Ctx, d: { room: RoomView; renderer: RoomRendere
           const reward = actions.CATCH_REWARDS[kind] ?? 5;
           toast(`${copy.text} +${reward}`, copy.icon);
           sfx(ctx, 'coin', 0.25);
+        } else {
+          // daily catch cap reached: still a lovely moment, just no coins
+          toast(copy.text, copy.icon);
         }
       }
       buddy.say('caught', { event: kind }, 'important');
     },
   };
 
-  if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__world = { ctx, buddy, zen, visit, letter, world, startOnboarding, shareCard: () => buildShareCard(ctx).toDataURL('image/png') };
+  if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__world = { ctx, renderer, buddy, zen, visit, letter, world, startOnboarding, shareCard: () => buildShareCard(ctx).toDataURL('image/png') };
   return world;
 }

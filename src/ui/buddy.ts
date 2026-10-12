@@ -5,7 +5,7 @@ import type { RoomRenderer } from '../render/room';
 import type { HitTarget } from '../render/scene';
 import { h } from './dom';
 import { modalOpen } from './overlay';
-import { BubbleLimiter, bubbleDuration, placeBubble, toCss, toLogical, type BubbleKind } from './worldlogic';
+import { BubbleLimiter, bubbleDuration, placeBubble, toCss, toLogical, type BubbleKind, type Box } from './worldlogic';
 import type { Ctx } from './context';
 
 export type Anchor = HitTarget | 'buddy';
@@ -19,6 +19,8 @@ export interface BuddyDeps {
   context(reason: BubbleReason, extra?: Partial<BubbleCtx>): BubbleCtx;
   /** Auto chatter allowed right now (settings.bubbles, not hidden…). */
   chatty(): boolean;
+  /** Area of the overlay bubbles should keep clear of (the corner buttons), in overlay px. */
+  avoid?(): Box | null;
 }
 
 export interface Buddy {
@@ -87,6 +89,7 @@ export function createBuddy(ctx: Ctx, d: BuddyDeps): Buddy {
     bubble.classList.remove('bubble-in');
     void bubble.offsetWidth;
     bubble.classList.add('bubble-in');
+    remeasure();
     position();
     const ms = bubbleDuration(line);
     hideAt = now + ms;
@@ -104,15 +107,29 @@ export function createBuddy(ctx: Ctx, d: BuddyDeps): Buddy {
     }, 180);
   }
 
+  // Layout is measured only when something changed (a new line, a resize), and styles are written
+  // only when the placement moves: positioning runs every frame and must not force a layout.
+  let measured: { W: number; H: number; bw: number; bh: number; avoid: Box | null } | null = null;
+  let placed = '';
+  const remeasure = () => {
+    measured = null;
+  };
   function position() {
     if (bubble.hidden) return;
-    const W = overlay.clientWidth;
-    const H = overlay.clientHeight;
-    if (!W || !H) return;
+    if (!measured) {
+      const W = overlay.clientWidth;
+      const H = overlay.clientHeight;
+      if (!W || !H) return;
+      measured = { W, H, bw: bubble.offsetWidth, bh: bubble.offsetHeight, avoid: d.avoid?.() ?? null };
+    }
+    const { W, H, bw, bh, avoid } = measured;
     const a = renderer.anchor(anchor) ?? renderer.anchor('buddy');
     if (!a) return hide();
     const p = toCss(a, W, H);
-    const pl = placeBubble(p.x, p.y, bubble.offsetWidth, bubble.offsetHeight, W, H);
+    const pl = placeBubble(p.x, p.y, bw, bh, W, H, 6, 10, avoid);
+    const key = `${Math.round(pl.left)}|${Math.round(pl.top)}|${Math.round(pl.tailX)}|${pl.below}`;
+    if (key === placed) return;
+    placed = key;
     bubble.style.left = `${Math.round(pl.left)}px`;
     bubble.style.top = `${Math.round(pl.top)}px`;
     bubble.style.setProperty('--tail-x', `${Math.round(pl.tailX)}px`);
@@ -218,6 +235,11 @@ export function createBuddy(ctx: Ctx, d: BuddyDeps): Buddy {
   });
   canvas.addEventListener('pointerleave', () => (canvas.style.cursor = ''));
 
-  window.addEventListener('resize', position);
+  window.addEventListener('resize', () => {
+    remeasure();
+    position();
+  });
+  // the overlay also changes size without a window resize (side panel collapsed, zen mode)
+  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(remeasure).observe(overlay);
   return b;
 }

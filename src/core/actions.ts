@@ -2,7 +2,7 @@ import type { AppState, Bonus, Session, Settings } from './types';
 import { ACHIEVEMENTS, computeStats } from './achievements';
 import { balance, coinsFor, dailyTotals, multiplierFor, streakInfo } from './economy';
 import { isAvailable, itemById, slotOf } from './catalog';
-import { MIN, splitByDay, uid } from './time';
+import { MIN, dayKey, splitByDay, uid } from './time';
 import { DEFAULT_PROFILE, normalizeProfile, type Profile } from './profile';
 import {
   activeByDay,
@@ -49,6 +49,7 @@ export function defaultState(): AppState {
     profileUpdatedAt: 0,
     bonuses: [],
     friends: [],
+    removedFriends: [],
     friendsUpdatedAt: 0,
   };
 }
@@ -61,6 +62,7 @@ export function normalize(raw: Partial<AppState> | null | undefined): AppState {
   merged.profile = normalizeProfile(raw.profile);
   if (!Array.isArray(merged.bonuses)) merged.bonuses = [];
   if (!Array.isArray(merged.friends)) merged.friends = [];
+  if (!Array.isArray(merged.removedFriends)) merged.removedFriends = [];
   // people who studied before profiles existed already know the app — skip the intro
   if (!raw.profile && (raw.sessions?.length ?? 0) > 0) merged.profile.onboarded = true;
   return merged;
@@ -133,9 +135,17 @@ export function end(state: AppState, now: number): EndResult {
   return { state: ev.state, session, unlocked: ev.unlocked };
 }
 
+/** Does [start, end) overlap a logged or running session? (You can't study twice at once.) */
+export function overlapsExisting(state: AppState, start: number, end: number): boolean {
+  const spans = state.sessions.map((s) => [s.start, s.end] as const);
+  if (state.active) spans.push([state.active.startedAt, Infinity]);
+  return spans.some(([a, b]) => start < b && end > a);
+}
+
 /** Log a session after the fact (earns base coins, no streak multiplier). */
 export function addManualSession(state: AppState, startTs: number, durationMs: number, now: number): EndResult {
   if (durationMs < MIN_SESSION_MS || startTs + durationMs > now) return { state, session: null, unlocked: [] };
+  if (overlapsExisting(state, startTs, startTs + durationMs)) return { state, session: null, unlocked: [] };
   const session: Session = {
     id: uid(),
     start: startTs,
@@ -230,10 +240,11 @@ export function hasBonus(state: AppState, id: string): boolean {
 }
 
 /** Attach a subject / note to a finished session (only right after it ends, before it syncs elsewhere). */
-export function annotateSession(state: AppState, id: string, patch: { subject?: string; note?: string }): AppState {
+export function annotateSession(state: AppState, id: string, patch: { subject?: string; note?: string }, now = Date.now()): AppState {
   const clean = {
     subject: patch.subject?.trim().slice(0, 40) || undefined,
     note: patch.note?.trim().slice(0, 500) || undefined,
+    annotatedAt: now,
   };
   return { ...state, sessions: state.sessions.map((s) => (s.id === id ? { ...s, ...clean } : s)) };
 }
@@ -241,11 +252,18 @@ export function annotateSession(state: AppState, id: string, patch: { subject?: 
 export function addFriend(state: AppState, code: string, name: string, now: number): AppState {
   const c = code.trim().toUpperCase();
   if (!c || state.friends.some((f) => f.code === c)) return state;
-  return { ...state, friends: [...state.friends, { code: c, name: name.slice(0, 24), addedAt: now }], friendsUpdatedAt: now };
+  // addedAt must beat any older removal tombstone for this code
+  const removedAt = state.removedFriends.find((r) => r.code === c)?.at ?? 0;
+  return { ...state, friends: [...state.friends, { code: c, name: name.slice(0, 24), addedAt: Math.max(now, removedAt + 1) }], friendsUpdatedAt: now };
 }
 
 export function removeFriend(state: AppState, code: string, now: number): AppState {
-  return { ...state, friends: state.friends.filter((f) => f.code !== code), friendsUpdatedAt: now };
+  return {
+    ...state,
+    friends: state.friends.filter((f) => f.code !== code),
+    removedFriends: [...state.removedFriends.filter((r) => r.code !== code), { code, at: now }],
+    friendsUpdatedAt: now,
+  };
 }
 
 // re-exported for convenience
@@ -253,8 +271,18 @@ export { balance };
 
 /** Coins for tapping a catchable world event. */
 export const CATCH_REWARDS: Record<string, number> = { 'shooting-star': 15, 'bird-visit': 5, balloon: 10, ufo: 50 };
+/** Paid catches per calendar day (the sky is still pretty after that, it just stops paying). */
+export const CATCHES_PER_DAY = 8;
 
-export function claimCatch(state: AppState, kind: string, now: number) {
+export function catchesToday(state: AppState, now: number): number {
+  const prefix = `catch:${dayKey(now)}:`;
+  return state.bonuses.filter((b) => b.id.startsWith(prefix)).length;
+}
+
+/** Claim a catch. Ids are per-day slots, so the daily cap also holds across devices. */
+export function claimCatch(state: AppState, kind: string, now: number): { state: AppState; claimed: boolean } {
+  const n = catchesToday(state, now);
+  if (n >= CATCHES_PER_DAY) return { state, claimed: false };
   const reward = CATCH_REWARDS[kind] ?? 5;
-  return claimBonus(state, { id: `catch:${kind}:${now}:${uid().slice(-4)}`, kind: 'catch', reward, label: kind }, now);
+  return claimBonus(state, { id: `catch:${dayKey(now)}:${n}`, kind: 'catch', reward, label: kind }, now);
 }

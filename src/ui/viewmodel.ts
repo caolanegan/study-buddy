@@ -78,7 +78,7 @@ export function deriveSession(state: AppState, now: number): SessionView {
       status,
       pomodoro: false,
       timer: formatDuration(0),
-      sub: mult > 1 ? `Ready when you are · streak bonus ${formatMult(mult)}` : 'Ready when you are',
+      sub: mult > 1 ? `Ready when you are · streak bonus\u00a0${formatMult(mult)}` : 'Ready when you are',
       coinLine: '',
       coins: 0,
       multiplier: mult,

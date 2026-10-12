@@ -47,17 +47,30 @@ export interface BubblePlacement {
 /**
  * Place a bubble of size bw×bh above an anchor point (ax, ay) inside a box of width W, height H,
  * clamped to the box with `pad` margin; flips below the anchor when there's no room above.
+ * `avoid` (e.g. the buttons in the room's top-right corner) is steered around: the bubble slides
+ * left of it, or, when it can't, drops below it.
  */
-export function placeBubble(ax: number, ay: number, bw: number, bh: number, W: number, H: number, pad = 6, gap = 10): BubblePlacement {
-  const left = Math.max(pad, Math.min(W - pad - bw, ax - bw / 2));
+export function placeBubble(ax: number, ay: number, bw: number, bh: number, W: number, H: number, pad = 6, gap = 10, avoid?: Box | null): BubblePlacement {
+  let left = Math.max(pad, Math.min(W - pad - bw, ax - bw / 2));
   let top = ay - gap - bh;
   let below = false;
   if (top < pad) {
     below = true;
     top = Math.min(H - pad - bh, ay + gap);
   }
+  top = Math.max(pad, top);
+  if (avoid && avoid.width > 0 && avoid.height > 0) {
+    const hits = (l: number, t: number) =>
+      l < avoid.left + avoid.width && l + bw > avoid.left && t < avoid.top + avoid.height && t + bh > avoid.top;
+    if (hits(left, top)) {
+      const slid = avoid.left - pad - bw;
+      // sliding left keeps the tail reaching the anchor as long as the anchor is still under the bubble
+      if (slid >= pad && ax - slid >= 14) left = slid;
+      else if (!below) top = Math.min(H - pad - bh, avoid.top + avoid.height + pad);
+    }
+  }
   const tailX = Math.max(14, Math.min(bw - 14, ax - left));
-  return { left, top: Math.max(pad, top), tailX, below };
+  return { left, top, tailX, below };
 }
 
 /** How long a bubble stays up: ~3.5s for a short line, up to ~6.5s for a long one. */

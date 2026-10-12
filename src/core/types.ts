@@ -24,6 +24,8 @@ export interface Session {
   subject?: string;
   /** Optional reflection written at the end. */
   note?: string;
+  /** When subject/note were last edited (newest wins in sync). */
+  annotatedAt?: number;
   /** Per-local-day active ms, used for streaks / daily totals. */
   byDay: Record<string, number>;
 }
@@ -111,5 +113,7 @@ export interface AppState {
   profileUpdatedAt: number;
   bonuses: Bonus[];
   friends: Friend[];
+  /** Tombstones so a friend removed on one device stays removed after sync. */
+  removedFriends: { code: string; at: number }[];
   friendsUpdatedAt: number;
 }

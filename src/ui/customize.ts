@@ -17,6 +17,7 @@ import {
   type RoomStyle,
   type Swatch,
 } from '../core/profile';
+import { ITEMS, itemById } from '../core/catalog';
 import { h, type Child } from './dom';
 import { openModal, toast } from './overlay';
 import { livePreview, PORTRAIT_CROP, sceneFor, thumb, WINDOW_CROP, type LivePreview } from './roompreview';
@@ -147,7 +148,13 @@ export function characterEditor(ctx: Ctx, draft: Draft, onChange: () => void): {
 
   // presets: little portraits of each ready-made buddy
   const presetNames = new Set(CHARACTER_PRESETS.map((p) => p.appearance.name));
-  const portrait = (look: Appearance) => thumb(sceneFor(st(), now(), { look, mode: 'studying', daytime: true, time: 0.4 }), PORTRAIT_CROP, 'cz-portrait');
+  // portraits show the bare look: no shop hats / hoodies hiding the hair and colours being picked
+  const attire = new Set(ITEMS.filter((i) => i.category === 'attire').map((i) => i.id));
+  const portrait = (look: Appearance) =>
+    thumb(sceneFor(st(), now(), { look, mode: 'studying', daytime: true, time: 0.4, without: (id) => attire.has(id) }), PORTRAIT_CROP, 'cz-portrait');
+  // a hoodie / sweater from the shop is worn over the chosen colour
+  const shopTop = [...actions.equippedItems(st())].map((id) => itemById(id)).find((i) => i?.slot === 'top');
+  const topNote = shopTop ? h('p', { class: 'muted small cz-note' }, `${shopTop.icon} Wearing the ${shopTop.name} from the shop — unequip it there to show this colour.`) : null;
   const presets = radioGroup(
     'Ready-made buddies',
     CHARACTER_PRESETS.map((p) => ({ id: p.id, label: p.appearance.name, content: [portrait(p.appearance), h('span', { class: 'cz-cap' }, p.appearance.name)], cls: 'cz-card cz-preset' })),
@@ -210,7 +217,7 @@ export function characterEditor(ctx: Ctx, draft: Draft, onChange: () => void): {
     section('Pick a buddy', presets.el),
     section('Skin', pick('skin', SKIN_TONES, 'Skin tone')),
     section('Hair', hair.el, pick('hairColor', HAIR_COLORS, 'Hair colour')),
-    section('Hoodie', pick('top', TOP_COLORS, 'Hoodie colour')),
+    section('Hoodie', pick('top', TOP_COLORS, 'Hoodie colour'), topNote),
   );
   return {
     el,

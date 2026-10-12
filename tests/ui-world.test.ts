@@ -68,6 +68,19 @@ describe('bubble placement', () => {
     expect(p.below).toBe(true);
     expect(p.top).toBe(30);
   });
+
+  it('steers clear of the corner buttons', () => {
+    const btns = { left: 320, top: 6, width: 74, height: 36 };
+    // would overlap the buttons: slides left so its right edge clears them
+    const p = placeBubble(330, 70, 200, 44, 400, 250, 6, 10, btns);
+    expect(p.left + 200).toBeLessThanOrEqual(320 - 6 + 0.001);
+    expect(p.tailX).toBeGreaterThan(14);
+    // no overlap → unchanged
+    expect(placeBubble(200, 100, 120, 40, 400, 250, 6, 10, btns)).toEqual(placeBubble(200, 100, 120, 40, 400, 250));
+    // too wide to slide: drops below the buttons
+    const wide = placeBubble(380, 120, 330, 44, 400, 250, 6, 10, btns);
+    expect(wide.top).toBeGreaterThanOrEqual(42);
+  });
 });
 
 describe('bubble timing & rate limits', () => {
