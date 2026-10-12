@@ -67,7 +67,6 @@ export class CityView implements View {
 
   drawSky(c: ViewCtx, p: Painter) {
     this.plane(c, p);
-    if (this.heli >= 0) this.helicopter(c, p);
   }
 
   draw(c: ViewCtx, d: Depth) {
@@ -80,6 +79,8 @@ export class CityView implements View {
     d.flush(0.75);
     drawLitWindows(m, FAR_WIN, c, 11, chance * 0.9, 0.75);
     this.antenna(m, c, 0);
+    // the helicopter weaves between the far towers and the nearer blocks
+    if (this.heli >= 0) this.helicopter(c, m);
 
     d.blit(this.layers.cs[1]);
     d.flush(0.3);
@@ -408,7 +409,7 @@ export class CityView implements View {
     }
     const dir = this.heliDir;
     const x = Math.round(dir > 0 ? -8 + (age / dur) * (WW + 16) : WW + 8 - (age / dur) * (WW + 16));
-    const y = Math.round(14 + Math.sin(age * 0.8) * 2);
+    const y = Math.round(11 + Math.sin(age * 0.8) * 2);
     const body = c.night > 0.5 ? '#2a2e3a' : '#c84a3a';
     p.rect(x - 2, y, 5, 3, body);
     p.rect(x + (dir > 0 ? 2 : -2), y + 1, 1, 1, '#9fd3f0');

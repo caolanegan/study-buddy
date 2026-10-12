@@ -497,6 +497,21 @@ const FIT: Record<HairStyle, { crown: number; band: number; wide: number; earsHi
 };
 const HAIR_STYLE_IDS = Object.keys(FIT) as HairStyle[];
 
+/** How far above the head centre the top of his hair / hat reaches (px), for speech-bubble anchors. */
+export function headTop(s: RenderScene): number {
+  const style: HairStyle = HAIR_STYLE_IDS.includes(s.look?.hair as HairStyle) ? (s.look.hair as HairStyle) : 'short';
+  const hairTop = { afro: 15, spiky: 13, bun: 12, curly: 10, buzz: 6 }[style as string] ?? 8;
+  const it = s.items;
+  const lift = FIT[style].crown;
+  let hatTop = 0;
+  if (it.has('wizard-hat')) hatTop = 18 + (style === 'afro' ? lift : 0);
+  else if (it.has('beanie')) hatTop = 14;
+  else if (it.has('crown')) hatTop = 11 + lift;
+  else if (it.has('cap')) hatTop = 11;
+  if (it.has('headphones')) hatTop = Math.max(hatTop, 11 + (it.has('beanie') ? 4 : FIT[style].band));
+  return Math.max(hatTop, it.has('beanie') || it.has('cap') ? 0 : hairTop);
+}
+
 /** 'hat' = beanie/cap/wizard hat pressing the hair down; 'crown' = something sitting on top of the hair. */
 type Cover = 'none' | 'hat' | 'crown';
 
@@ -775,7 +790,7 @@ function drawFace(p: Painter, P: Pal, x: number, y: number, side: 1 | -1, expr: 
     p.rect(side > 0 ? x - 1 : x, y + 1, 2, 3, P.K);
     p.px(X(0), y + 2, P.KS);
   }
-  const eye = '#2a1d16';
+  const eye = '#160d0a';
   if (expr === 'happy') {
     p.px(X(4), y + 1, eye);
     p.px(X(5), y, eye);
@@ -786,7 +801,10 @@ function drawFace(p: Painter, P: Pal, x: number, y: number, side: 1 | -1, expr: 
     p.px(X(6), y + 4, P.mouth);
     p.px(X(6), y + 5, P.mouth);
   } else {
-    p.rect(side > 0 ? x + (expr === 'calm' ? 6 : 5) : x - (expr === 'calm' ? 6 : 5), y + 1, 1, 1, eye);
+    const ex = expr === 'calm' ? 6 : 5;
+    p.px(X(ex), y + 1, eye);
+    p.px(X(ex), y, eye);
+    p.px(X(ex + 1), y, '#fffaf0'); // catch-light so the eye reads on every skin tone
     if (expr === 'smile') p.px(X(6), y + 4, P.mouth);
   }
   span(3, 5, 6, P.blush);

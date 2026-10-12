@@ -463,3 +463,9 @@ html.zen-on .toasts, body:has(.modal.customize) .toasts {
 @media (min-width: 900px) {
   html.zen-on .toasts, body:has(.modal.customize) .toasts { top: 20px; }
 }
+@media (max-width: 400px) {
+  .ob-actions { gap: 8px; }
+  .ob-actions .btn, .ob-actions .btn-go { min-width: 0; padding: 0 14px; }
+  .ob-actions .btn-go { flex: 1 1 auto; max-width: 190px; }
+  .modal.customize .modal-title { font-size: 19px; padding-right: calc(88px + var(--sar)); }
+}

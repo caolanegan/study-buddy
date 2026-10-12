@@ -142,9 +142,9 @@ export class Outside {
     view.draw(c, d);
 
     this.fx.fog(p, c, FOG_BANDS[viewId], w === 'fog' ? 0.8 : 0);
+    this.director.drawFront(p, c, view.horizon);
     this.fx.particles(p, c, view);
     this.fx.lightningFx(p, c, view.horizon, ev);
-    this.director.drawFront(p, c);
     this.fx.glass(p, c);
     g.restore();
   }

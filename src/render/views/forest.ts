@@ -264,13 +264,13 @@ export class ForestView implements View {
     }
     const dir = this.dir;
     if (kind === 'deer') {
-      const pause = age > 6 && age < 12;
-      const prog = pause ? 6 : age < 6 ? age : age - 6;
-      const x = dir > 0 ? -8 + prog * 4.4 : WW + 8 - prog * 4.4;
-      drawDeer(p, x, 53, dir, c.time, pause);
+      const pause = age > 5 && age < 12;
+      const prog = pause ? 5 : age < 5 ? age : age - 7;
+      const x = dir > 0 ? 4 + prog * 4.2 : WW - 12 - prog * 4.2;
+      drawDeer(p, x, 52, dir, c.time, pause);
     } else {
-      const x = dir > 0 ? -6 + age * 6 : WW + 6 - age * 6;
-      drawFoxSprite(p, x, 55, dir, c.time);
+      const x = dir > 0 ? 4 + age * 5 : WW - 8 - age * 5;
+      drawFoxSprite(p, x, 54, dir, c.time);
     }
   }
 }

@@ -6,6 +6,7 @@ import {
   activityFor,
   reactPose,
   headAt,
+  headTop,
   MUG,
   REACTION_LEN,
   TAP_REACTIONS,
@@ -15,7 +16,7 @@ import {
   type ReactionKind,
 } from './character';
 import { ITEM_ART, ITEM_LIST, type ArtCtx, type Layer } from './items';
-import type { HitTarget } from './scene';
+import type { HitTarget, WorldEventKind } from './scene';
 import { WIN, FLOOR_Y, DESK, CABINET, STAND_LIFT, TV, mainMonitor, type RenderEvents, type RenderScene } from './scene';
 import { wallOf, floorOf, curtainOf, type WallId, type FloorId, type CurtainId } from '../core/profile';
 
@@ -38,10 +39,6 @@ export function plantStage(hours: number): number {
 
 /** Seconds of studying it takes him to finish a full mug. */
 export const COFFEE_SECONDS = 45 * 60;
-/** Mug fill after `studied` seconds of a session (refilled at session start), minus `sips` taken by taps. */
-export function coffeeLevel(studied: number, sips = 0): number {
-  return Math.max(0, Math.min(1, 1 - studied / COFFEE_SECONDS - sips * 0.08));
-}
 
 /** Pixel-art heart (5x4) rows. */
 const HEART = ['.X.X.', 'XXXXX', '.XXX.', '..X..'];
@@ -120,6 +117,8 @@ export class RoomRenderer {
   private lastPose: Pose = 'typing';
   private lastCtx: ArtCtx | null = null;
   private lastTap: Pt = { x: 0, y: 0 };
+  /** The catchable world event last hit (for its speech-bubble anchor). */
+  private worldKind: WorldEventKind | null = null;
   private anchorCache = new Map<string, Pt | null>();
   private anchorTime = NaN;
 
@@ -179,9 +178,12 @@ export class RoomRenderer {
     const s = this.last;
     if (!s) return null;
     this.lastTap = { x, y };
-    const o = this.outside as unknown as { hitTest?: (x: number, y: number) => unknown };
     try {
-      if (o.hitTest?.(x, y)) return 'world-event';
+      const kind = this.outside.hitTest(x, y);
+      if (kind) {
+        this.worldKind = kind;
+        return 'world-event';
+      }
     } catch {
       /* outside not ready */
     }
@@ -236,9 +238,8 @@ export class RoomRenderer {
         this.tvTap = time;
         break;
       case 'world-event': {
-        const o = this.outside as unknown as { catchAt?: (x: number, y: number, t: number) => unknown };
         try {
-          o.catchAt?.(x ?? this.lastTap.x, y ?? this.lastTap.y, time);
+          this.outside.catchAt(x ?? this.lastTap.x, y ?? this.lastTap.y, time);
         } catch {
           /* ignore */
         }
@@ -281,9 +282,7 @@ export class RoomRenderer {
       case 'buddy':
       case 'character': {
         const h = headAt(s, this.lastPose, this.lastAct, this.activeReact(s.time));
-        const hat = ['beanie', 'wizard-hat', 'crown', 'cap'].some((id) => it.has(id));
-        const big = s.look?.hair === 'afro' ? 4 : s.look?.hair === 'spiky' || s.look?.hair === 'bun' ? 3 : 0;
-        return { x: h.x, y: h.y - 9 - Math.max(big, hat ? (it.has('wizard-hat') ? 9 : 5) : 0) };
+        return { x: h.x, y: h.y - headTop(s) - 2 };
       }
       case 'mug':
         return { x: MUG.x + 4, y: MUG.y - lift - 2 };
@@ -307,9 +306,8 @@ export class RoomRenderer {
       case 'window':
         return { x: WX + WW / 2, y: WY + (curtainOf(s.room?.curtains ?? 'red').id === 'blinds' ? BLINDS_H + 2 : 4) };
       case 'world-event': {
-        const o = this.outside as unknown as { anchor?: () => Pt | null };
         try {
-          const a = o.anchor?.();
+          const a = this.outside.anchor(this.worldKind ?? undefined);
           if (a) return a;
         } catch {
           /* ignore */
@@ -447,8 +445,8 @@ export class RoomRenderer {
       lift,
       prevTime: prev,
       emit: (pet) => this.events.onPet?.(pet),
+      petTap: this.petTap,
     };
-    (ctx as ArtCtx & { petTap?: Record<string, number> }).petTap = this.petTap;
     this.last = s;
     this.lastAct = act;
     this.lastPose = pose;
@@ -1223,7 +1221,7 @@ function drawStarterPlant(p: Painter, stage: number, t: number, tapK: number) {
 }
 
 /** Seasonal knick-knack on the right end of the windowsill (sim season). */
-const SILL = { x: 72, y: WY + WH + 4 };
+const SILL = { x: 55, y: WY + WH + 4 };
 function drawSillDecor(p: Painter, season: number) {
   const { x, y } = SILL;
   if (season === 0) {

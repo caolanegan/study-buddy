@@ -27,6 +27,8 @@ export interface ArtCtx {
   prevTime: number;
   /** Fire a pet sound. */
   emit: (pet: 'cat' | 'dog') => void;
+  /** Animation time each pet was last tapped (room interaction), keyed by item id. */
+  petTap?: Record<string, number>;
 }
 
 export interface ItemArt {
@@ -836,6 +838,7 @@ function drawCat(p: Painter, s: RenderScene, ctx: ArtCtx) {
   const walk = (a: Pt, b: Pt, k: number) => catWalk(p, t, lerp(a.x, b.x, k), lerp(a.y, b.y, k), b.x < a.x);
   const hop = (a: Pt, b: Pt, k: number) => catWalk(p, 0, lerp(a.x, b.x, k), lerp(a.y, b.y, k) - Math.sin(k * Math.PI) * 14, b.x < a.x);
   if (c < 16 && s.items.has('robot-vacuum')) return; // riding the robot vacuum (drawn by it)
+  if (catPetted(p, t, t - (ctx.petTap?.cat ?? -1e9), c, S, G, D)) return;
   if (c < 17) return catCurl(p, t, S.x, S.y, true);
   if (c < 19) return catSit(p, t, S.x, S.y, true, 'yawn');
   if (c < 26) return walk(S, G, ease((c - 19) / 7));
@@ -965,6 +968,7 @@ function drawDog(p: Painter, s: RenderScene, ctx: ArtCtx) {
   const C = ctx.act === 'stand' ? { x: 128, y: 129 } : { x: 177, y: 129 };
   if (crossed(ctx, t, DOG_T, 41 - 31)) ctx.emit('dog'); // woof as he sits down by the chair
   if (crossed(ctx, t, DOG_T, 23 - 31 + DOG_T)) ctx.emit('dog'); // waking up
+  if (dogPetted(p, t, t - (ctx.petTap?.dog ?? -1e9), c, B, C)) return;
   if (c < 22) return dogLie(p, t, B.x, B.y, true, false);
   if (c < 30) return dogLie(p, t, B.x, B.y, false, true);
   if (c < 35) return dogSit(p, t, B.x - 2, B.y, false, 'scratch');
@@ -1062,7 +1066,7 @@ const fishTank: ItemArt[] = [
   },
   {
     layer: 'screen',
-    draw(p, s, { night }) {
+    draw(p, s, { night, petTap }) {
       const t = s.time;
       const x = TANK.x + 1;
       const y = TANK.y + 2;
@@ -1083,8 +1087,11 @@ const fishTank: ItemArt[] = [
       p.px(x + 9, y + h - 6, '#9a94a3');
       p.px(x + 8, y + h - 4, '#3a3a44');
       // fish swimming back and forth
+      // tapped: the fish dart across the tank and back
+      const tapK = t - (petTap?.['fish-tank'] ?? -1e9);
+      const dart = tapK >= 0 && tapK < 1.6 ? Math.sin((tapK / 1.6) * Math.PI) * 2.4 : 0;
       for (const f of FISH) {
-        const ph = t * f.sp + f.ph;
+        const ph = t * f.sp + f.ph + dart;
         const fx = Math.round(x + 1.5 + (w - 6) * (0.5 + 0.5 * Math.sin(ph)));
         const right = Math.cos(ph) > 0;
         const fy = f.y + Math.round(Math.sin(t * 1.3 + f.ph) * 0.6);
@@ -2393,6 +2400,24 @@ const robotVacuum: ItemArt[] = [
   },
 ];
 
+/**
+ * Where a moving wave-2 item is right now (logical px, bottom-centre; desk lift ignored), for hit tests and
+ * speech-bubble anchors. `night` = 1 - sky.day (the parrot sleeps at night). Null for unknown ids.
+ */
+export function movingItemSpot(id: string, s: RenderScene, night = 0): Pt | null {
+  if (id === 'robot-vacuum') {
+    const v = vacState(s.time % CAT_T);
+    return { x: Math.round(v.x), y: Math.round(v.y) };
+  }
+  if (id === 'parrot') return { x: Math.round(parrotState(s, night).x), y: PERCH.y - 1 };
+  if (id === 'ghost-plush') {
+    const g = ghostState(s);
+    return { x: Math.round(g.x), y: Math.round(g.y) };
+  }
+  if (id === 'hamster') return { x: CAGE.x + CAGE.w / 2, y: DESK.top };
+  return null;
+}
+
 // ───────────────────────── limited-time attire (drawn by character.ts) ─────────────────────────
 
 /** Hat ids drawn by drawLimitedHat. */
@@ -2400,9 +2425,10 @@ export const LIMITED_HATS = ['witch-hat', 'santa-hat', 'bunny-ears'] as const;
 
 /**
  * Seasonal hats, seen from behind, around head centre (hx, hy) — same frame as character.ts drawHat.
- * `t` (optional, s.time) makes the bunny ears twitch.
+ * `t` (s.time) makes the bunny ears twitch; `hair` (the hair colour) fills the strip under the santa hat's cuff,
+ * like the beanie. Witch / santa hats cover the hair (cover 'hat'); bunny ears sit on top of it (cover 'crown').
  */
-export function drawLimitedHat(p: Painter, id: string, hx: number, hy: number, t = 0) {
+export function drawLimitedHat(p: Painter, id: string, hx: number, hy: number, t = 0, hair?: string) {
   if (id === 'witch-hat') {
     const c = '#3a3245';
     const dk = '#2a2433';
@@ -2426,7 +2452,10 @@ export function drawLimitedHat(p: Painter, id: string, hx: number, hy: number, t
   if (id === 'santa-hat') {
     const red = '#d23a2a';
     const sh = '#a82a22';
-    p.disc(hx, hy - 4, 7, red);
+    for (let dy = -7; dy <= 0; dy++) {
+      const w = Math.floor(Math.sqrt(49 - dy * dy) + 0.5);
+      p.rect(hx - w, hy - 4 + dy, w * 2 + 1, 1, red);
+    }
     // floppy tip falling to his right
     const tip: [number, number, number][] = [
       [hx + 2, hy - 11, 4],
@@ -2444,6 +2473,7 @@ export function drawLimitedHat(p: Painter, id: string, hx: number, hy: number, t
     for (let x = hx - 8; x <= hx + 8; x += 2) p.px(x, hy - 4, '#f3ead8');
     for (let x = hx - 7; x <= hx + 7; x += 3) p.px(x, hy, '#d9cfc0');
     p.px(hx - 8, hy - 3, '#ffffff');
+    if (hair) p.rect(hx - 7, hy + 1, 15, 1, hair);
     // pompom
     p.disc(hx + 12, hy - 5, 2, '#ffffff');
     p.px(hx + 13, hy - 4, '#d9cfc0');
@@ -2470,18 +2500,74 @@ export function drawLimitedHat(p: Painter, id: string, hx: number, hy: number, t
   }
 }
 
-/** Seasonal face items seen from behind (sunglasses): thick temple arms + dark lens corners at the sides. */
-export function drawLimitedFace(p: Painter, id: string, hx: number, hy: number) {
+/**
+ * Seasonal face items seen from behind (sunglasses): thick temple arms + dark lens corners at the sides.
+ * `wide` = the hairstyle's FIT.wide (same as the glasses).
+ */
+export function drawLimitedFace(p: Painter, id: string, hx: number, hy: number, wide = 0) {
   if (id !== 'sunglasses') return;
   const c = '#1d1d24';
-  p.rect(hx - 10, hy - 1, 4, 2, c);
-  p.rect(hx + 7, hy - 1, 4, 2, c);
-  p.px(hx - 6, hy + 1, c);
-  p.px(hx + 6, hy + 1, c);
-  p.rect(hx - 12, hy - 2, 2, 3, '#26262c');
-  p.rect(hx + 11, hy - 2, 2, 3, '#26262c');
-  p.px(hx - 12, hy - 2, '#ff9ecb');
-  p.px(hx + 12, hy - 2, '#6ec3ff');
+  p.rect(hx - 10 - wide, hy - 1, 4, 2, c);
+  p.rect(hx + 7 + wide, hy - 1, 4, 2, c);
+  if (!wide) {
+    p.px(hx - 6, hy + 1, c);
+    p.px(hx + 6, hy + 1, c);
+  }
+  p.rect(hx - 12 - wide, hy - 2, 2, 3, '#26262c');
+  p.rect(hx + 11 + wide, hy - 2, 2, 3, '#26262c');
+  p.px(hx - 12 - wide, hy - 2, '#ff9ecb');
+  p.px(hx + 12 + wide, hy - 2, '#6ec3ff');
+}
+
+// ───────────────────────── tap reactions (room interaction) ─────────────────────────
+
+/** Cat stretching after being woken (a play-bow, facing right). */
+const CAT_STRETCH = new Sprite(
+  [
+    '.o................',
+    '.o..........o...o.',
+    '..o.........ooooo.',
+    '..ooooo.....odood.',
+    '..oooodoodo.ooooo.',
+    '...ooooooooooooopo',
+    '...oo...oooooow...',
+    '...oo....wwwwwwww.',
+    '...ww.............',
+  ],
+  CAT_PAL,
+);
+
+/** Petted cat: wakes and stretches if curled up, purrs (eyes shut, a little wiggle) if sitting. False = carry on. */
+function catPetted(p: Painter, t: number, k: number, c: number, S: Pt, G: Pt, D: Pt): boolean {
+  if (k < 0 || k > 3) return false;
+  let at: Pt | null = null;
+  if (c < 19 || c >= 63) at = S;
+  else if (c >= 26 && c < 36) at = G;
+  else if (c >= 37 && c < 54) at = D;
+  if (!at) return false;
+  const x = Math.round(at.x);
+  const y = Math.round(at.y);
+  const curled = c < 17 || c >= 65;
+  if (curled && k < 1.3) {
+    drawSprite(p, CAT_STRETCH, x - 9, y - 9, false);
+    return true;
+  }
+  // purring: eyes closed, tail curled, tiny vibration
+  const wob = Math.floor(t * 14) % 2;
+  p.rect(x - 8, y - 1, 5, 1, CAT_PAL.o);
+  p.px(x - 9, y - 2 - wob, CAT_PAL.d);
+  drawSprite(p, CAT_SIT_BLINK, x - 6 + wob, y - 13, false);
+  return true;
+}
+
+/** Petted dog: tail goes wild (lying dogs perk up). False = carry on (e.g. mid-walk). */
+function dogPetted(p: Painter, t: number, k: number, c: number, B: Pt, C: Pt): boolean {
+  if (k < 0 || k > 3) return false;
+  if (c < 30 || c >= 62) dogLie(p, t * 1.7, B.x, B.y, false, true);
+  else if (c < 35) dogSit(p, t * 1.6, B.x - 2, B.y, false, 'beg');
+  else if (c >= 40 && c < 56) dogSit(p, t * 1.6, C.x, C.y, C.x < 150, 'beg');
+  else return false;
+  return true;
 }
 
 // ───────────────────────── registry ─────────────────────────

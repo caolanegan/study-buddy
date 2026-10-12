@@ -151,8 +151,8 @@ export class EventDirector {
         break;
       case 'kite':
         e.dur = 45;
-        e.x = 14 + r() * (WW - 28);
-        e.y = 8 + r() * 8;
+        e.x = 10 + r() * (WW - 30);
+        e.y = 6 + r() * 7;
         break;
       case 'birds':
         e.dur = (WW + 50) / 9;
@@ -188,7 +188,7 @@ export class EventDirector {
           d[i * 5 + 1] = 8 + r() * (WW - 16);
           d[i * 5 + 2] = 6 + r() * 16;
           d[i * 5 + 3] = (r() * FW.length) | 0;
-          d[i * 5 + 4] = 6 + r() * 5;
+          d[i * 5 + 4] = 7 + r() * 6;
           tb += i % 5 === 4 ? 1.8 : 0.35 + r() * 0.8; // little volleys
         }
         e.data = d;
@@ -223,9 +223,6 @@ export class EventDirector {
         case 'birds':
           this.flock(p, e, age, c);
           break;
-        case 'ufo':
-          this.ufo(p, e, age, c, horizon);
-          break;
         case 'shooting-star':
           this.star(p, e, age);
           break;
@@ -233,9 +230,13 @@ export class EventDirector {
     }
   }
 
-  /** Things right behind the glass (the bird on the sill). */
-  drawFront(p: Painter, c: ViewCtx) {
-    for (const e of this.active) if (e.kind === 'bird-visit' && c.time >= e.t0) this.sillBird(p, e, c.time - e.t0, c);
+  /** Things in front of the scenery: the UFO (its beam reaches the ground) and the bird on the sill. */
+  drawFront(p: Painter, c: ViewCtx, horizon: number) {
+    for (const e of this.active) {
+      if (c.time < e.t0) continue;
+      if (e.kind === 'ufo') this.ufo(p, e, c.time - e.t0, c, horizon);
+      else if (e.kind === 'bird-visit') this.sillBird(p, e, c.time - e.t0, c);
+    }
   }
 
   private addHit(e: Ev, x: number, y: number, r: number) {
@@ -529,9 +530,10 @@ export class EventDirector {
       const r = R * (1 - Math.exp(-3.2 * a));
       const fadeA = Math.max(0, 1 - a / 1.9);
       g.fillStyle = FW[ci];
-      for (let j = 0; j < 14; j++) {
+      g.globalCompositeOperation = 'lighter';
+      for (let j = 0; j < 18; j++) {
         if (a > 1.1 && (j + Math.floor(a * 20)) % 3 === 0) continue; // crackle as it fades
-        const ang = (j / 14) * Math.PI * 2 + i;
+        const ang = (j / 18) * Math.PI * 2 + i;
         const x = bx + Math.cos(ang) * r;
         const y = by + Math.sin(ang) * r * 0.9 + 3 * a * a;
         g.globalAlpha = fadeA;
@@ -541,6 +543,7 @@ export class EventDirector {
           g.fillRect(Math.round(bx + Math.cos(ang) * r * 0.6), Math.round(by + Math.sin(ang) * r * 0.55 + 2 * a * a), 1, 1);
         }
       }
+      g.globalCompositeOperation = 'source-over';
       g.globalAlpha = 1;
     }
   }

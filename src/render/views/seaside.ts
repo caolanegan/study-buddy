@@ -1,7 +1,7 @@
 // 'seaside': a sea horizon with rolling highlights and a sun / moon glitter path, a headland lighthouse
 // (beam sweeps at night), sailboats, gulls, a beach with dune grass and a boardwalk jogger. Rare: dolphins
 // leaping, a whale spouting. Winter: grey sea and snow on the sand; storms: whitecaps and big breakers.
-import { Painter, glowSprite } from '../pixel';
+import { Painter, Sprite, drawSprite, glowSprite } from '../pixel';
 import type { WorldEventKind } from '../scene';
 import { WW, WH, Layers, h01, SNOW, SNOW_SHADE, GRASS, fillProfile, type Depth, type View, type ViewCtx } from './common';
 
@@ -160,7 +160,8 @@ export class SeasideView implements View {
       return (x * 3 + y * 5) % 11 === 0 || (x + y * 2) % 7 === 0 ? rockDark : rock;
     });
     // rock face shading strata
-    for (let y = 22; y < SHORE; y += 4) p.line(47 + (y - 22) * 0.3, y, 55, y + 1, rockDark);
+    for (let y = 22; y < SHORE; y += 4)
+      for (let x = 44; x < 58; x++) if (y > cliffTop(x) + 3 && (x + y) % 3 !== 0) p.px(x, y + (x > 52 ? 1 : 0), rockDark);
     // foam at the foot of the rocks
     for (let x = 44; x < WW; x += 3) p.px(x + (x % 2), SHORE - 1, '#e8f0f4');
 
@@ -245,24 +246,27 @@ export class SeasideView implements View {
     }
   }
 
-  /** Glitter path under the sun / moon. */
+  /** Glitter path under the sun / moon: twinkling horizontal dashes widening toward the shore. */
   private glitter(m: Painter, c: ViewCtx) {
     if (c.orbA <= 0.05 || c.orbY > HZ + 1) return;
     const night = c.t >= 0.5;
     const low = Math.max(0, 1 - (HZ - c.orbY) / 20);
-    const a = c.orbA * (night ? 0.35 + 0.5 * c.s.moon : 0.5 + 0.35 * low);
-    const col = night ? '232,236,255' : low > 0.5 ? '255,190,120' : '255,244,200';
+    const a = c.orbA * (night ? 0.3 + 0.5 * c.s.moon : 0.45 + 0.35 * low);
+    const col = night ? '232,236,255' : low > 0.5 ? '255,190,120' : '255,248,215';
     const g = m.g;
-    const slot = Math.floor(c.time * 5);
+    const slot = Math.floor(c.time * 3);
     for (let y = HZ + 1; y < SHORE; y++) {
-      const spread = 1 + (y - HZ) * 0.35;
-      for (let k = 0; k < 2; k++) {
-        const hsh = h01(y * 97 + slot * 13 + k * 7);
-        if (hsh < 0.35) continue;
-        const x = Math.round(c.orbX + (hsh - 0.65) * spread * 3);
-        if (x >= 45) continue;
-        g.fillStyle = `rgba(${col},${a * (0.5 + hsh * 0.5)})`;
-        g.fillRect(x, y, 1 + (k === 0 && y > HZ + 6 ? 1 : 0), 1);
+      const depth = (y - HZ) / (SHORE - HZ);
+      const spread = 2 + depth * 9;
+      const n = 1 + Math.floor(depth * 2);
+      for (let k = 0; k < n; k++) {
+        const hsh = h01(y * 97 + (slot + k) * 13 + k * 7);
+        if (hsh < 0.3) continue;
+        const len = 1 + Math.floor(depth * 3 * h01(y + k * 5 + slot));
+        const x = Math.round(c.orbX + (h01(y * 31 + k * 11 + slot) - 0.5) * spread);
+        if (x + len > 45) continue;
+        g.fillStyle = `rgba(${col},${a * (0.45 + hsh * 0.55)})`;
+        g.fillRect(x, y, len, 1);
       }
     }
   }
@@ -348,23 +352,22 @@ export class SeasideView implements View {
     const sin = Math.sin(th);
     const facing = sin > 0 ? sin : 0;
     g.globalCompositeOperation = 'lighter';
-    const reach = 75 * Math.abs(cos) + 6;
-    const hw = 2 + 7 * Math.abs(sin);
-    const ex = cx + Math.sign(cos) * reach;
-    const a = (0.1 + 0.08 * facing) * vis * (sin < 0 ? 0.5 : 1);
-    g.fillStyle = `rgba(255,240,180,${a})`;
-    g.beginPath();
-    g.moveTo(cx, cy - 1);
-    g.lineTo(ex, cy - hw - 1);
-    g.lineTo(ex, cy + hw);
-    g.lineTo(cx, cy + 1);
-    g.fill();
-    g.beginPath();
-    g.moveTo(cx, cy - 1);
-    g.lineTo(cx + Math.sign(cos) * reach * 0.5, cy - hw * 0.4);
-    g.lineTo(cx + Math.sign(cos) * reach * 0.5, cy + hw * 0.4);
-    g.lineTo(cx, cy + 1);
-    g.fill();
+    const reach = 80 * Math.abs(cos) + 4;
+    const sx = Math.sign(cos) || 1;
+    const hw = 1 + 3.5 * Math.abs(sin);
+    const base = (0.13 + 0.1 * facing) * vis * (sin < 0 ? 0.55 : 1);
+    // four tapering segments, fading with distance
+    for (let i = 0; i < 4; i++) {
+      const u0 = i / 4;
+      const u1 = (i + 1) / 4;
+      g.fillStyle = `rgba(255,240,180,${base * (1 - u0 * 0.8)})`;
+      g.beginPath();
+      g.moveTo(cx + sx * reach * u0, cy - 0.5 - hw * u0);
+      g.lineTo(cx + sx * reach * u1, cy - 0.5 - hw * u1);
+      g.lineTo(cx + sx * reach * u1, cy + 0.5 + hw * u1);
+      g.lineTo(cx + sx * reach * u0, cy + 0.5 + hw * u0);
+      g.fill();
+    }
     glowSprite(m, cx, cy, 4 + facing ** 4 * 10, [255, 236, 170], vis * (0.5 + facing ** 4 * 0.5));
     g.globalCompositeOperation = 'source-over';
     m.rect(cx - 1, LH_TOP, 3, 2, `rgba(255,240,180,${vis})`);
@@ -372,39 +375,39 @@ export class SeasideView implements View {
 
   private drawDolphins(p: Painter, c: ViewCtx) {
     const age = c.time - this.dolphin;
-    if (age > 6 || age < 0) {
-      if (age > 6) this.dolphin = -1;
+    if (age > 7 || age < 0) {
+      if (age > 7) this.dolphin = -1;
       return;
     }
-    const body = '#5f7896';
-    const belly = '#a8bccc';
+    const g = p.g;
+    const d = this.dolphinDir;
     for (let n = 0; n < 2; n++) {
+      const wy = HZ + 9 + n * 3;
       for (let j = 0; j < 3; j++) {
-        const st = j * 1.6 + n * 0.5;
-        const k = (age - st) / 1.1;
-        const x0 = this.dolphinX + this.dolphinDir * (j * 9 + n * 4);
-        const wy = HZ + 7 + n * 2;
-        if (k < -0.1 || k > 1.25) continue;
+        const st = j * 1.9 + n * 0.8;
+        const k = (age - st) / 1.2;
+        const x0 = this.dolphinX + d * (j * 11 + n * 7);
+        if (k < -0.1 || k > 1.4) continue;
         if (k >= 0 && k <= 1) {
-          const x = x0 + this.dolphinDir * k * 8;
-          const y = wy - Math.sin(k * Math.PI) * 5;
-          const vy = -Math.cos(k * Math.PI);
-          for (let s = 0; s < 4; s++) {
-            const bx = Math.round(x - this.dolphinDir * s);
-            const by = Math.round(y - vy * s * 0.9);
-            if (by > wy) continue;
-            p.px(bx, by, s === 0 || s === 3 ? body : s === 1 ? belly : body);
-          }
-          p.px(Math.round(x - this.dolphinDir), Math.round(y + vy * -0.9) - 1, body); // fin
+          const x = x0 + d * k * 10;
+          const y = wy - Math.sin(k * Math.PI) * 6;
+          const spr = k < 0.38 ? DOLPHIN.up : k < 0.62 ? DOLPHIN.top : DOLPHIN.down;
+          g.save();
+          g.beginPath();
+          g.rect(0, 0, WW, wy);
+          g.clip();
+          drawSprite(p, spr, x - spr.w / 2, y - spr.h / 2, d < 0);
+          g.restore();
         }
         // splashes going in / out
-        const sk = k < 0.15 ? k / 0.15 : k > 0.85 ? (k - 0.85) / 0.4 : -1;
+        const sk = k < 0.18 ? k / 0.18 : k > 0.85 ? (k - 0.85) / 0.5 : -1;
         if (sk >= 0 && sk <= 1) {
-          const sx = k < 0.5 ? x0 : x0 + this.dolphinDir * 8;
-          p.g.fillStyle = `rgba(240,248,252,${1 - sk})`;
-          p.g.fillRect(Math.round(sx - 1 - sk), wy - Math.round(sk * 2), 1, 1);
-          p.g.fillRect(Math.round(sx + 1 + sk), wy - Math.round(sk * 2), 1, 1);
-          p.g.fillRect(Math.round(sx), wy - Math.round(1 + sk * 2), 1, 1);
+          const sx = k < 0.5 ? x0 : x0 + d * 10;
+          g.fillStyle = `rgba(245,250,252,${1 - sk})`;
+          g.fillRect(Math.round(sx - 1 - sk * 2), wy - Math.round(sk * 3), 1, 1);
+          g.fillRect(Math.round(sx + 1 + sk * 2), wy - Math.round(sk * 3), 1, 1);
+          g.fillRect(Math.round(sx), wy - Math.round(1 + sk * 3), 1, 1);
+          g.fillRect(Math.round(sx - 2), wy, 5, 1);
         }
       }
     }
@@ -453,6 +456,14 @@ export class SeasideView implements View {
 }
 
 const BOAT_X: number[] = [0, 0, 0, 0];
+
+// leaping dolphin (faces right): rising, level, diving
+const DPAL = { B: '#5a7090', D: '#46597a', W: '#c8d6e2' };
+const DOLPHIN = {
+  up: new Sprite(['.....BB', '....BBW', '...BBW.', '.DBBW..', 'DD.....'], DPAL),
+  top: new Sprite(['...B....', 'DBBBBBB.', 'D.WWWWBB'], DPAL),
+  down: new Sprite(['DD.....', '.DBBB..', '...BBB.', '...WWBB', '.....BB'], DPAL),
+};
 
 function sailboat(p: Painter, x: number, y: number, i: number, c: ViewCtx) {
   x = Math.round(x);
