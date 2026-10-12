@@ -492,6 +492,12 @@ input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; bor
 .toast-icon { font-size: 20px; flex: none; }
 .toast.closing { animation: toast-in .2s ease reverse forwards; }
 @keyframes toast-in { from { transform: translateY(12px); opacity: 0; } }
+/* phones / iPad portrait: toasts drop in over the header instead of covering the Start button or a bottom sheet */
+@media (max-width: 899px) {
+  .toasts { top: calc(8px + var(--sat)); bottom: auto; }
+  .toast, .toast.closing { animation-name: toast-down; }
+  @keyframes toast-down { from { transform: translateY(-12px); opacity: 0; } }
+}
 
 /* ───────── small phones ───────── */
 @media (max-width: 420px) {
