@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Room Lab</title>
+<style>
+  body { margin: 0; background: #1d1b26; color: #f3ead8; font: 14px system-ui, sans-serif; }
+  #wrap { max-width: 960px; margin: 0 auto; padding: 12px; }
+  canvas { width: 100%; image-rendering: pixelated; display: block; border-radius: 8px; }
+  #ctl { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="room"></canvas><div id="ctl"></div></div>
+<script type="module" src="/src/lab.ts"></script>
+</body>
+</html>
