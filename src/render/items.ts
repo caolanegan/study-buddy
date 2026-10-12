@@ -835,6 +835,7 @@ function drawCat(p: Painter, s: RenderScene, ctx: ArtCtx) {
   if (crossed(ctx, t, CAT_T, 44)) ctx.emit('cat');
   const walk = (a: Pt, b: Pt, k: number) => catWalk(p, t, lerp(a.x, b.x, k), lerp(a.y, b.y, k), b.x < a.x);
   const hop = (a: Pt, b: Pt, k: number) => catWalk(p, 0, lerp(a.x, b.x, k), lerp(a.y, b.y, k) - Math.sin(k * Math.PI) * 14, b.x < a.x);
+  if (c < 16 && s.items.has('robot-vacuum')) return; // riding the robot vacuum (drawn by it)
   if (c < 17) return catCurl(p, t, S.x, S.y, true);
   if (c < 19) return catSit(p, t, S.x, S.y, true, 'yawn');
   if (c < 26) return walk(S, G, ease((c - 19) / 7));
@@ -1205,6 +1206,1285 @@ function drawLizard(p: Painter, t: number, x: number, y: number, right: boolean,
   if (t % 2.7 < 0.18) p.px(x + d * 5 + (right ? 0 : 0), hy + 1, '#e04a6a');
 }
 
+// ───────────────────────── more furniture (shop wave 2) ─────────────────────────
+//
+// Spots (logical px), chosen so everything fits at once:
+//  wall   neon sign 137..163 × 17..27 (above the main monitor) · red lanterns hang at x 128 / 172 either side of it
+//         guitar on a hook 93..101 × 13..41 (between curtain and clock) · harvest wreath under the clock (112, 44)
+//         heart lamp under the poster (192, 46)
+//  window bat garland swagged from the curtain rod · parrot perch on the left of the sill · tulips mid-sill
+//         · tabletop telescope on the right of the sill
+//  desk   snow globe at the left end · desk fan 117..129 · study globe 184..194 (right of the mug)
+//         · hamster cage 200..219 + coffee machine 220..230 at the right end (over the drawer cabinet)
+//  floor  record player on a vinyl crate 86..101 (left of the PC tower) · pumpkin between terrarium and cabinet
+//         · festive tree in the right corner in front of the bookshelf · robot-vacuum dock under the desk (126, 104)
+
+/** Draws strings of '#' rows as pixels. */
+function glyph(p: Painter, rows: string[], x: number, y: number, c: string) {
+  rows.forEach((r, j) => {
+    for (let i = 0; i < r.length; i++) if (r[i] === '#') p.px(x + i, y + j, c);
+  });
+}
+
+/** A little eighth note (3x4). */
+const NOTE = ['.##', '.#.', '##.', '##.'];
+/** Notes drifting up from (x, y): `n` staggered notes, `period` seconds each. */
+function floatNotes(p: Painter, t: number, x: number, y: number, n: number, period: number, rise: number, cols: string[]) {
+  for (let i = 0; i < n; i++) {
+    const k = ((t / period + i / n) % 1 + 1) % 1;
+    const a = Math.sin(k * Math.PI);
+    const nx = Math.round(x + Math.sin(k * 5 + i * 2) * 3 + (i % 2 ? 2 : -2) * k);
+    const ny = Math.round(y - k * rise);
+    p.g.globalAlpha = Math.min(1, a * 1.4);
+    glyph(p, NOTE, nx, ny, cols[i % cols.length]);
+    p.g.globalAlpha = 1;
+  }
+}
+
+// ── neon sign ──
+const NEON = { x: 137, y: 17, w: 27, h: 11 };
+const NEON_FONT: Record<string, string[]> = {
+  S: ['.##', '#..', '.#.', '..#', '##.'],
+  T: ['###', '.#.', '.#.', '.#.', '.#.'],
+  U: ['#.#', '#.#', '#.#', '#.#', '###'],
+  D: ['##.', '#.#', '#.#', '#.#', '##.'],
+  Y: ['#.#', '#.#', '.#.', '.#.', '.#.'],
+};
+/** 0..1 brightness of a neon letter: the U buzzes out now and then. */
+function neonLevel(t: number, i: number) {
+  if (i !== 2) return 1;
+  const c = t % 11;
+  return (c > 5 && c < 5.12) || (c > 5.22 && c < 5.36) || (c > 5.45 && c < 5.5) || (c > 8.6 && c < 8.68) ? 0 : 1;
+}
+const neonSign: ItemArt[] = [
+  {
+    layer: 'wall',
+    draw(p) {
+      const { x, y, w, h } = NEON;
+      // power cord dropping behind the monitor
+      p.rect(x + w - 4, y + h, 1, 20, '#3a3340');
+      p.rect(x + 1, y + 1, w, h, 'rgba(60,40,40,0.18)'); // shadow
+      p.rect(x + 1, y, w - 2, h, '#2b2733');
+      p.rect(x, y + 1, w, h - 2, '#2b2733');
+      p.rect(x + 1, y, w - 2, 1, '#3d3846');
+      for (const [sx, sy] of [[x + 1, y + 1], [x + w - 2, y + 1], [x + 1, y + h - 2], [x + w - 2, y + h - 2]]) p.px(sx, sy, '#55505f');
+    },
+  },
+  {
+    layer: 'screen',
+    draw(p, s) {
+      const t = s.time;
+      const tx = NEON.x + 4;
+      const ty = NEON.y + 2;
+      [...'STUDY'].forEach((ch, i) => glyph(p, NEON_FONT[ch], tx + i * 4, ty, neonLevel(t, i) ? '#ff7ccb' : '#6b3d5a'));
+      // underline swoosh with a little spark at the end
+      p.rect(tx, ty + 7, 17, 1, '#5fe3ff');
+      p.px(tx + 18, ty + 6, '#5fe3ff');
+      p.px(tx + 18, ty + 8, '#5fe3ff');
+      p.px(tx + 19, ty + 7, '#5fe3ff');
+      p.px(tx + 17, ty + 7, '#d8fbff');
+    },
+  },
+  {
+    layer: 'glow',
+    draw(p, s, { night }) {
+      const t = s.time;
+      const on = neonLevel(t, 2);
+      const buzz = (0.92 + 0.08 * Math.sin(t * 50)) * (on ? 1 : 0.8);
+      additive(p, () => {
+        glowSprite(p, NEON.x + 12, NEON.y + 5, 22, [255, 110, 200], (0.05 + 0.32 * night) * buzz);
+        glowSprite(p, NEON.x + 13, NEON.y + 9, 12, [80, 220, 255], 0.03 + 0.2 * night);
+      });
+    },
+  },
+];
+
+// ── red lanterns ──
+const LANTERNS = [
+  { x: 128, top: 16, ph: 0 },
+  { x: 172, top: 16, ph: 1.9 },
+];
+const lanternSway = (t: number, ph: number) => Math.sin(t * 0.9 + ph) * 1.2;
+const redLanterns: ItemArt[] = [
+  {
+    layer: 'wall',
+    draw(p, s) {
+      for (const L of LANTERNS) {
+        const sw = lanternSway(s.time, L.ph);
+        for (let y = 0; y < L.top; y++) p.px(L.x + Math.round((sw * y) / L.top), y, '#7a2a22');
+      }
+    },
+  },
+  {
+    layer: 'screen',
+    draw(p, s, { night }) {
+      const lit = night > 0.25;
+      const body = lit ? '#ff6a3a' : '#d23a2a';
+      const rib = lit ? '#e04a2a' : '#a82a22';
+      const hi = lit ? '#ffb070' : '#e85a44';
+      const gold = lit ? '#ffd166' : '#d9a441';
+      for (const L of LANTERNS) {
+        const x = L.x + Math.round(lanternSway(s.time, L.ph));
+        const y = L.top;
+        p.rect(x - 2, y, 5, 1, gold);
+        p.rect(x - 2, y + 1, 5, 1, body);
+        p.rect(x - 3, y + 2, 7, 5, body);
+        p.rect(x - 2, y + 7, 5, 1, body);
+        p.rect(x - 2, y + 8, 5, 1, gold);
+        p.rect(x - 1, y + 2, 1, 5, rib);
+        p.rect(x + 1, y + 2, 1, 5, rib);
+        p.rect(x - 3, y + 2, 1, 5, rib);
+        p.rect(x - 2, y + 2, 1, 4, hi);
+        // tassel
+        const tw = Math.round(lanternSway(s.time - 0.4, L.ph) - lanternSway(s.time, L.ph));
+        p.px(x, y + 9, gold);
+        p.rect(x + tw, y + 10, 1, 3, '#d23a2a');
+      }
+    },
+  },
+  {
+    layer: 'glow',
+    draw(p, s, { night }) {
+      additive(p, () => {
+        for (const L of LANTERNS) glowSprite(p, L.x + lanternSway(s.time, L.ph), L.top + 4, 15, [255, 90, 50], 0.04 + 0.3 * night);
+      });
+    },
+  },
+];
+
+// ── harvest wreath ──
+const WREATH = { x: 112, y: 44 };
+const LEAF_COLS = ['#e07b39', '#c0392b', '#f2b134', '#b5651d', '#d9534f', '#e8a23a'];
+const WREATH_LEAVES = Array.from({ length: 11 }, (_, i) => {
+  const a = (i / 11) * Math.PI * 2 - 1.2;
+  const r = 4.4 + (i % 2) * 0.6;
+  return { x: Math.round(Math.cos(a) * r), y: Math.round(Math.sin(a) * r), tx: Math.round(Math.cos(a) * (r + 1.9)), ty: Math.round(Math.sin(a) * (r + 1.9)), c: LEAF_COLS[(i * 5) % LEAF_COLS.length] };
+});
+const harvestWreath: ItemArt[] = [
+  {
+    layer: 'wall',
+    draw(p) {
+      const { x, y } = WREATH;
+      p.px(x, y - 7, '#5a3a26'); // nail
+      p.line(x, y - 7, x - 2, y - 5, '#c9a46a');
+      p.line(x, y - 7, x + 2, y - 5, '#c9a46a');
+      p.disc(x + 1, y + 1, 6, 'rgba(60,40,30,0.12)');
+      // twig ring
+      for (let a = 0; a < Math.PI * 2; a += 0.12) {
+        p.px(x + Math.round(Math.cos(a) * 4.5), y + Math.round(Math.sin(a) * 4.5), '#7a4e2c');
+        p.px(x + Math.round(Math.cos(a) * 3.6), y + Math.round(Math.sin(a) * 3.6), '#8f6238');
+      }
+      // leaves: little plus shapes with a pointed tip
+      for (const L of WREATH_LEAVES) {
+        p.px(x + L.tx, y + L.ty, L.c);
+        p.px(x + L.x, y + L.y, L.c);
+        p.px(x + L.x + 1, y + L.y, L.c);
+        p.px(x + L.x - 1, y + L.y, L.c);
+        p.px(x + L.x, y + L.y + 1, L.c);
+        p.px(x + L.x, y + L.y - 1, L.c);
+      }
+      // berries + tiny pine cones
+      for (const [bx, by] of [[-4, -2], [3, -4], [4, 2], [-3, 3]]) {
+        p.px(x + bx, y + by, '#7a1f2a');
+        p.px(x + bx + 1, y + by, '#a83244');
+      }
+      p.rect(x + 4, y - 1, 1, 2, '#6a4226');
+      p.rect(x - 5, y, 1, 2, '#6a4226');
+      // burlap bow at the bottom
+      p.rect(x - 3, y + 4, 2, 2, '#d8b98a');
+      p.rect(x + 2, y + 4, 2, 2, '#d8b98a');
+      p.rect(x - 1, y + 5, 3, 1, '#c9a46a');
+      p.px(x - 2, y + 7, '#c9a46a');
+      p.px(x + 2, y + 7, '#c9a46a');
+      p.px(x - 3, y + 4, '#ecd4a8');
+    },
+  },
+  {
+    // a leaf lets go now and then and drifts down
+    layer: 'behind-char',
+    draw(p, s) {
+      const T = 23;
+      const k = (s.time % T) / 4.5;
+      if (k >= 1) return;
+      const x = WREATH.x + 3 + Math.round(Math.sin(k * 9) * 3 + k * 6);
+      const y = WREATH.y + 6 + Math.round(k * 34);
+      p.g.globalAlpha = k > 0.85 ? (1 - k) / 0.15 : 1;
+      p.px(x, y, '#e07b39');
+      p.px(x + (Math.sin(k * 9) > 0 ? 1 : -1), y, '#c0622a');
+      p.g.globalAlpha = 1;
+    },
+  },
+];
+
+// ── heart lamp ──
+const HEART = ['.###.###.', '#########', '#########', '#########', '.#######.', '..#####..', '...###...', '....#....'];
+const HEART_AT = { x: 188, y: 42 };
+const heartBeat = (t: number) => {
+  const c = t % 2.2;
+  return Math.max(0, 1 - Math.abs(c - 0.15) * 7) + 0.6 * Math.max(0, 1 - Math.abs(c - 0.45) * 7);
+};
+const heartLamp: ItemArt[] = [
+  {
+    layer: 'wall',
+    draw(p) {
+      const { x, y } = HEART_AT;
+      glyph(p, HEART, x + 1, y + 1, 'rgba(90,40,60,0.18)');
+    },
+  },
+  {
+    layer: 'screen',
+    draw(p, _s, { night }) {
+      const { x, y } = HEART_AT;
+      const lit = night > 0.25;
+      glyph(p, HEART, x, y, lit ? '#ff8cc0' : '#f48fb1');
+      glyph(p, ['', '', '.......#', '.......#', '......#', '.....#'], x, y, lit ? '#ff6aa8' : '#d9668f');
+      p.rect(x + 1, y + 1, 2, 1, lit ? '#fff0f6' : '#ffd1e3');
+      p.px(x + 1, y + 2, lit ? '#fff0f6' : '#ffd1e3');
+    },
+  },
+  {
+    layer: 'glow',
+    draw(p, s, { night }) {
+      additive(p, () => glowSprite(p, HEART_AT.x + 4, HEART_AT.y + 4, 16, [255, 120, 180], (0.04 + 0.3 * night) * (0.8 + 0.25 * heartBeat(s.time))));
+    },
+  },
+];
+
+// ── guitar on a wall hook ──
+const GTR = { x: 97, y: 11 };
+const GTR_BODY: [number, number][] = [
+  // [dy from hook, half-width]
+  [15, 2],
+  [16, 3],
+  [17, 3],
+  [18, 3],
+  [19, 3],
+  [20, 2],
+  [21, 3],
+  [22, 4],
+  [23, 4],
+  [24, 4],
+  [25, 4],
+  [26, 4],
+  [27, 3],
+  [28, 2],
+];
+const guitar: ItemArt[] = [
+  {
+    layer: 'wall',
+    draw(p, s, { mode }) {
+      const { x, y } = GTR;
+      p.px(x, y, '#3a3a44'); // hook
+      // shadow on the wall
+      for (const [dy, hw] of GTR_BODY) p.rect(x - hw + 1, y + dy + 1, hw * 2 + 1, 1, 'rgba(60,40,30,0.15)');
+      // headstock + tuning pegs
+      p.rect(x - 1, y + 1, 3, 4, '#3a2414');
+      for (const py of [y + 2, y + 4]) {
+        p.px(x - 2, py, '#c9c6cf');
+        p.px(x + 2, py, '#c9c6cf');
+      }
+      // neck + frets
+      p.rect(x - 1, y + 5, 3, 10, '#5a3a20');
+      for (let fy = y + 6; fy < y + 15; fy += 2) p.rect(x - 1, fy, 3, 1, '#7a5a3a');
+      // body: honey top, cream binding, darker right side
+      for (const [dy, hw] of GTR_BODY) {
+        p.rect(x - hw, y + dy, hw * 2 + 1, 1, '#e0a35a');
+        p.px(x - hw, y + dy, '#f3ead8');
+        p.px(x + hw, y + dy, '#b5763a');
+      }
+      p.rect(x - 1, y + 15, 3, 1, '#f3ead8');
+      p.rect(x - 1, y + 28, 3, 1, '#b5763a');
+      p.disc(x, y + 20, 1, '#2a1a10'); // sound hole
+      p.px(x - 2, y + 20, '#a8754a');
+      p.px(x + 2, y + 20, '#a8754a');
+      p.rect(x - 2, y + 25, 5, 1, '#3a2414'); // bridge
+      // strings: shimmer on breaks
+      const brk = mode === 'break';
+      for (const sx of [x - 1, x + 1])
+        for (let sy = y + 2; sy < y + 25; sy++) {
+          const wob = brk && sy > y + 15 ? Math.round(Math.sin(s.time * 40 + sy + sx) * 0.6) : 0;
+          const glint = brk && ((sy * 3 + sx - Math.floor(s.time * 20)) % 9 + 9) % 9 === 0;
+          p.px(sx + wob, sy, glint ? '#ffffff' : '#d8d4cc');
+        }
+    },
+  },
+  {
+    layer: 'top',
+    draw(p, s, { mode }) {
+      if (mode !== 'break') return;
+      // a couple of little sparkles while the strings ring
+      for (let i = 0; i < 2; i++) {
+        const k = (s.time * 0.8 + i * 0.5) % 1;
+        p.g.globalAlpha = Math.sin(k * Math.PI) * 0.9;
+        const sx = GTR.x + (i ? 5 : -5) + Math.round(Math.sin(k * 6 + i) * 1.5);
+        const sy = GTR.y + 26 - Math.round(k * 10);
+        p.px(sx, sy, '#fff3b0');
+        if (k > 0.3 && k < 0.7) {
+          p.px(sx - 1, sy, '#fff3b0');
+          p.px(sx + 1, sy, '#fff3b0');
+          p.px(sx, sy - 1, '#fff3b0');
+          p.px(sx, sy + 1, '#fff3b0');
+        }
+        p.g.globalAlpha = 1;
+      }
+    },
+  },
+];
+
+// ── bat garland (strung from the curtain rod across the top of the window) ──
+const GARL = { x0: 5, x1: 91, sag: 7 };
+const garlY = (x: number) => {
+  const half = (GARL.x1 - GARL.x0) / 2;
+  const k = ((x - GARL.x0) % half) / half;
+  return 8 + Math.round(GARL.sag * Math.sin(Math.PI * k));
+};
+const BAT_ROWS = ['#.......#', '##.#.#.##', '#########', '.#.###.#.'];
+const BATS = [
+  new Sprite(BAT_ROWS.map((r, i) => (i === 2 ? '###e#e###' : r)), { '#': '#2b2235', e: '#f2b134' }),
+  new Sprite(BAT_ROWS.map((r, i) => (i === 2 ? '###e#e###' : r)), { '#': '#6a3d8f', e: '#f2b134' }),
+];
+/** Wings tucked up a little (alternate frame for the sway). */
+const BATS_UP = [
+  new Sprite(['.........', '##.#.#.##', '###e#e###', '#.#####.#'], { '#': '#2b2235', e: '#f2b134' }),
+  new Sprite(['.........', '##.#.#.##', '###e#e###', '#.#####.#'], { '#': '#6a3d8f', e: '#f2b134' }),
+];
+const BAT_X = [15, 27, 39, 57, 70, 82];
+const batGarland: ItemArt[] = [
+  {
+    layer: 'behind-char',
+    draw(p, s) {
+      const t = s.time;
+      for (let x = GARL.x0; x <= GARL.x1; x++) p.px(x, garlY(x), '#5a4a3a');
+      BAT_X.forEach((bx, i) => {
+        const sway = Math.round(Math.sin(t * 1.3 + i * 1.1) * 0.8);
+        const flutter = Math.sin(t * 0.7 + i * 2.3) > 0.85;
+        const y = garlY(bx) + 1;
+        p.px(bx, y, '#5a4a3a');
+        drawSprite(p, (flutter ? BATS_UP : BATS)[i % 2], bx - 4 + sway, y + 1);
+      });
+    },
+  },
+];
+
+// ── tabletop telescope on the sill ──
+const SCOPE = { x: 74, y: 66 };
+const scopeAngle = (night: number) => 0.35 + 0.42 * (Math.round(night * 3) / 3);
+const telescope: ItemArt[] = [
+  {
+    layer: 'behind-char',
+    draw(p, _s, { night }) {
+      const { x, y } = SCOPE;
+      const leg = '#5a3a20';
+      p.line(x, y + 1, x - 5, y + 8, leg);
+      p.line(x, y + 1, x + 5, y + 8, leg);
+      p.line(x, y + 1, x + 1, y + 8, '#7a4e2c');
+      p.rect(x - 1, y, 3, 2, '#3a3a44'); // mount
+      const a = scopeAngle(night);
+      const dx = -Math.cos(a);
+      const dy = -Math.sin(a);
+      // shadow side, then the tube; dew shield at the front, eyepiece at the back
+      for (let i = -5; i <= 9; i += 0.5) p.rect(Math.round(x + dx * i) - 1, Math.round(y + dy * i), 3, 2, '#b8b2a8');
+      for (let i = -5; i <= 9; i += 0.5) p.rect(Math.round(x + dx * i) - 1, Math.round(y + dy * i) - 1, 3, 2, '#e9e4da');
+      for (let i = 8; i <= 10; i += 0.5) p.rect(Math.round(x + dx * i) - 1, Math.round(y + dy * i) - 1, 3, 3, '#d9a441');
+      p.rect(Math.round(x + dx * 10.5) - 1, Math.round(y + dy * 10.5) - 1, 2, 2, '#9fc3d6'); // lens
+      for (let i = 1; i <= 2; i++) p.rect(Math.round(x + dx * i) - 1, Math.round(y + dy * i) - 1, 3, 2, '#c0392b'); // band
+      const ex = Math.round(x - dx * 6);
+      const ey = Math.round(y - dy * 6);
+      p.rect(ex, ey, 2, 2, '#2d2d35');
+      p.line(Math.round(x + dx * 4), Math.round(y + dy * 4) - 2, Math.round(x + dx * 7), Math.round(y + dy * 7) - 2, '#c9c6cf'); // finder
+    },
+  },
+  {
+    layer: 'glow',
+    draw(p, s, { night, mode }) {
+      if (mode !== 'break' || night < 0.5) return;
+      const a = scopeAngle(night);
+      const ex = Math.round(SCOPE.x + Math.cos(a) * 6) + 1;
+      const ey = Math.round(SCOPE.y + Math.sin(a) * 6);
+      const tw = 0.5 + 0.5 * Math.sin(s.time * 5);
+      const c = `rgba(255,248,210,${(0.5 + 0.5 * tw).toFixed(2)})`;
+      p.px(ex, ey - 1, c);
+      if (tw > 0.4) {
+        p.px(ex - 1, ey - 1, c);
+        p.px(ex + 1, ey - 1, c);
+        p.px(ex, ey - 2, c);
+        p.px(ex, ey, c);
+      }
+      additive(p, () => glowSprite(p, ex, ey - 1, 5, [255, 240, 190], 0.25 * tw));
+    },
+  },
+];
+
+// ── tulips in a vase (on the sill) ──
+const VASE = { x: 46, y: 74 };
+const TULIPS = [
+  { dx: -3, h: 9, c: '#d9534f', d: '#b5403c' },
+  { dx: 0, h: 12, c: '#f48fb1', d: '#d9668f' },
+  { dx: 3, h: 8, c: '#f2c12e', d: '#d9a420' },
+];
+const flowerVase: ItemArt[] = [
+  {
+    layer: 'behind-char',
+    draw(p, s) {
+      const { x, y } = VASE;
+      TULIPS.forEach((f, i) => {
+        const sw = Math.round(Math.sin(s.time * 0.8 + i * 1.7) * 0.6);
+        const hx = x + f.dx + sw;
+        const hy = y - 5 - f.h;
+        p.line(x + Math.sign(f.dx), y - 5, hx, hy + 3, '#4f9e48');
+        p.rect(hx - 1, hy + 1, 3, 2, f.c);
+        p.px(hx - 1, hy, f.c);
+        p.px(hx + 1, hy, f.c);
+        p.px(hx, hy + 1, f.d);
+        p.px(hx + 1, hy + 2, f.d);
+      });
+      // leaves
+      p.line(x - 1, y - 5, x - 4, y - 9, '#3e9148');
+      p.line(x + 1, y - 5, x + 3, y - 10, '#56ad5a');
+      // glass vase with water
+      p.rect(x - 2, y - 6, 5, 1, '#d6eef7');
+      p.rect(x - 3, y - 5, 7, 5, '#a9d8ec');
+      p.rect(x - 3, y - 3, 7, 3, '#7fbcd8');
+      p.px(x - 2, y - 4, '#ffffff');
+      p.rect(x - 2, y, 5, 1, '#5f9fbd');
+    },
+  },
+];
+
+// ── parrot on a perch at the left of the sill ──
+const PERCH = { x0: 15, x1: 35, y: 63, post: 25 };
+const PAR_PAL = { r: '#d63a2f', d: '#a82a22', y: '#f2c12e', b: '#2e6fbf', w: '#f3ead8', k: '#1d1d24', B: '#efe6d6', n: '#2d2d35', g: '#8a8a96' };
+const PAR_HEAD = new Sprite(['...rrr..', '..rrrrr.', '..rrwkB.', '..rrwwBB', '..rrrrnB'], PAR_PAL);
+const PAR_HEAD_SHUT = PAR_HEAD.recolor({ k: '#e9dccb' });
+const PAR_BODY = new Sprite(['..rrrrr.', '.yrrrrr.', '.yyyrrr.', '.bbbrr..', '..bbbr..', '...gg...', '..rb....', '..rb....', '.rb.....', '.b......'], PAR_PAL);
+const PAR_BODY_FLAP = new Sprite(['..rrrrr.', '..rrrrr.', '..rrrrr.', '..rrrr..', '..rrrr..', '...gg...', '..rb....', '..rb....', '.rb.....', '.b......'], PAR_PAL);
+const PAR_T = 34;
+const WING_UP: [number, number, 'b' | 'y'][] = [[0, -2, 'b'], [-1, -3, 'b'], [-2, -4, 'b'], [0, -1, 'y'], [-1, -2, 'y'], [-2, -3, 'y'], [1, -1, 'y']];
+const WING_DOWN: [number, number, 'b' | 'y'][] = [[0, 3, 'b'], [-1, 4, 'b'], [-2, 5, 'b'], [0, 2, 'y'], [-1, 3, 'y'], [1, 2, 'y']];
+/** Parrot x on the perch (feet centre). */
+const PAR_X = [19, 31];
+function parrotState(s: RenderScene, night: number) {
+  const t = s.time;
+  const c = t % PAR_T;
+  const asleep = night > 0.6 && s.mode === 'idle';
+  if (asleep) return { x: PAR_X[0], lift: 0, right: true, act: 'sleep' as const };
+  const hop = (a: number, b: number, k: number) => ({ x: lerp(a, b, k), lift: Math.abs(Math.sin(k * Math.PI * 3)) * 2 });
+  if (c < 8) return { x: PAR_X[0], lift: 0, right: true, act: 'bob' as const };
+  if (c < 9.2) return { ...hop(PAR_X[0], PAR_X[1], (c - 8) / 1.2), right: true, act: 'hop' as const };
+  if (c < 15) return { x: PAR_X[1], lift: 0, right: false, act: 'sing' as const };
+  if (c < 16.6) return { x: PAR_X[1], lift: Math.floor(t * 8) % 2, right: false, act: 'flap' as const };
+  if (c < 24) return { x: PAR_X[1], lift: 0, right: false, act: 'bob' as const };
+  if (c < 25.2) return { ...hop(PAR_X[1], PAR_X[0], (c - 24) / 1.2), right: false, act: 'hop' as const };
+  if (c < 30) return { x: PAR_X[0], lift: 0, right: true, act: 'bob' as const };
+  if (c < 31.2) return { x: PAR_X[0], lift: Math.floor(t * 8) % 2, right: true, act: 'flap' as const };
+  return { x: PAR_X[0], lift: 0, right: true, act: 'sing' as const };
+}
+const parrot: ItemArt[] = [
+  {
+    layer: 'behind-char',
+    draw(p, s, { night, mode }) {
+      const t = s.time;
+      const { x0, x1, y, post } = PERCH;
+      // T-perch standing on the sill
+      p.rect(post - 3, 74, 7, 1, '#5a3a20');
+      p.rect(post, y + 2, 1, 72 - y, '#8a5a35');
+      const st = parrotState(s, night);
+      const px = Math.round(st.x);
+      const fy = y - 1 - Math.round(st.lift); // feet row
+      const left = px - 3;
+      const top = fy - 10;
+      const flip = !st.right;
+      const music = mode === 'studying' || mode === 'break' || s.items.has('record-player');
+      let bob = 0;
+      if (st.act === 'bob') bob = music ? Math.floor(t * 4) % 2 : t % 1.6 < 0.25 ? 1 : 0;
+      if (st.act === 'sleep') bob = 1;
+      const flapUp = st.act === 'flap' && Math.floor(t * 12) % 2 === 0;
+      drawSprite(p, st.act === 'flap' ? PAR_BODY_FLAP : PAR_BODY, left, top + 5, flip);
+      if (st.act === 'flap') {
+        // wing beating above / below the back
+        const d = flip ? -1 : 1;
+        const bx = px - d * 2;
+        for (const [ox, oy, k] of flapUp ? WING_UP : WING_DOWN) p.px(bx + d * ox, top + 6 + oy, PAR_PAL[k]);
+      }
+      drawSprite(p, st.act === 'sleep' || t % 3.7 < 0.12 ? PAR_HEAD_SHUT : PAR_HEAD, left, top + bob, flip);
+      if (st.act === 'sing' && Math.floor(t * 5) % 2 === 0) p.px(flip ? left + 1 : left + 6, top + bob + 5, PAR_PAL.n); // beak open
+      // perch bar on top of the feet
+      p.rect(x0, y, x1 - x0, 2, '#a0703f');
+      p.rect(x0 + 1, y, x1 - x0 - 2, 1, '#c09060');
+      p.px(x0, y + 1, '#7a4e2c');
+      p.px(x1 - 1, y + 1, '#7a4e2c');
+      // seed cup clipped to the post
+      p.rect(post + 1, y + 4, 4, 3, '#3f86c7');
+      p.rect(post + 1, y + 4, 4, 1, '#f2b134');
+      p.rect(px - 1, fy + 1, 2, 1, PAR_PAL.g); // toes wrapped over the bar
+      if (st.act === 'sleep') drawZz(p, px + 3, top - 1, t);
+    },
+  },
+  {
+    layer: 'top',
+    draw(p, s, { night }) {
+      const st = parrotState(s, night);
+      if (st.act !== 'sing') return;
+      const c = s.time % PAR_T;
+      const t0 = c < 15 ? c - 9.2 : c - 31.2;
+      const x = Math.round(st.x) + (st.right ? 4 : -6);
+      floatNotes(p, t0, x, PERCH.y - 12, 2, 1.6, 10, ['#5fbf77', '#f2b134']);
+    },
+  },
+];
+
+// ── record player on a vinyl crate ──
+const REC = { x: 86, y: 103, w: 16 };
+const RECORD_COLS = ['#c0392b', '#2e86ab', '#f2b134', '#1d1d24', '#5fbf77', '#8e5ea2', '#e9e4da', '#d9534f'];
+const playing = (m: Mode) => m === 'studying' || m === 'break';
+const recordPlayer: ItemArt[] = [
+  {
+    layer: 'behind-char',
+    draw(p, s, { mode }) {
+      const { x, y, w } = REC;
+      const t = s.time;
+      const on = playing(mode);
+      // wooden crate with record spines showing
+      const cy0 = y + 7;
+      p.rect(x, cy0, w, 12, '#b07a48');
+      p.rect(x + 2, cy0 + 2, w - 4, 8, '#3a2614');
+      for (let i = 0; i < w - 4; i++) if (i % 3 !== 2) p.rect(x + 2 + i, cy0 + 2 + (i % 4 === 0 ? 1 : 0), 1, 8 - (i % 4 === 0 ? 1 : 0), RECORD_COLS[(i * 5) % RECORD_COLS.length]);
+      p.rect(x, cy0, 1, 12, '#8a5a35');
+      p.rect(x + w - 1, cy0, 1, 12, '#8a5a35');
+      p.rect(x + 1, cy0 + 10, w - 2, 1, '#c99560');
+      p.rect(x, cy0 + 11, w, 1, '#6a4226');
+      // teal suitcase turntable: cream deck on top, teal case front
+      p.rect(x, y + 3, w, 4, '#3f8f8a');
+      p.rect(x, y + 3, w, 1, '#5fb0a8');
+      p.rect(x, y + 6, w, 1, '#2f6f6b');
+      p.px(x + 2, y + 4, '#efe6d6');
+      p.px(x + 4, y + 4, '#efe6d6');
+      for (let i = 0; i < 3; i++) p.px(x + 9 + i * 2, y + 5, '#2f6f6b'); // speaker grille
+      p.px(x + w - 2, y + 4, on ? '#7dffb0' : '#a84a3a');
+      p.rect(x, y, w, 3, '#efe6d6');
+      p.rect(x, y, w, 1, '#fff8ea');
+      // vinyl on the platter
+      const cx = x + 6;
+      p.rect(cx - 4, y, 9, 3, '#1d1d24');
+      p.rect(cx - 3, y - 1, 7, 1, '#1d1d24');
+      p.rect(cx - 1, y + 1, 2, 1, '#d9534f');
+      if (on) {
+        const a = t * 3.5;
+        p.px(cx + Math.round(Math.cos(a) * 3.4), y + 1 + Math.round(Math.sin(a) * 1.2), '#6a6a7a');
+        p.px(cx + Math.round(Math.cos(a + Math.PI) * 2.6), y + 1 + Math.round(Math.sin(a + Math.PI) * 1), '#44444f');
+      } else p.px(cx - 3, y, '#44444f');
+      // tonearm: on the record while playing, parked otherwise
+      const px = x + w - 3;
+      p.rect(px, y - 1, 2, 2, '#c9c6cf');
+      if (on) {
+        p.line(px, y - 1, cx + 3, y, '#c9c6cf');
+        p.px(cx + 2, y + 1, '#55556a');
+      } else {
+        p.line(px, y - 1, px, y + 2, '#c9c6cf');
+        p.px(px, y + 2, '#55556a');
+      }
+    },
+  },
+  {
+    layer: 'top',
+    draw(p, s, { mode }) {
+      if (!playing(mode)) return;
+      floatNotes(p, s.time, REC.x + 6, REC.y - 4, 3, 3.2, 20, ['#f2b134', '#c792ea', '#6ec3ff']);
+    },
+  },
+];
+
+// ── coffee machine at the right end of the desk ──
+const COFFEE = { x: 220, w: 11, h: 18 };
+/** Breaks: a gurgle burst every few seconds. */
+const gurgling = (s: RenderScene) => s.mode === 'break' && s.time % 4 < 1.3;
+const coffeeMachine: ItemArt[] = [
+  {
+    layer: 'behind-char',
+    draw(p, s, { lift }) {
+      const shake = gurgling(s) && Math.floor(s.time * 14) % 2 ? 1 : 0;
+      const x = COFFEE.x + shake;
+      const y = DESK.top - lift - COFFEE.h;
+      const t = s.time;
+      // water tank on top
+      p.rect(x + 1, y, 9, 4, '#cfe3ea');
+      p.rect(x + 2, y + 1, 7, 3, '#7fb8d6');
+      p.rect(x + 1, y, 9, 1, '#26262c');
+      if (gurgling(s)) p.px(x + 3 + (Math.floor(t * 6) % 5), y + 2, '#e6f6fc'); // bubble
+      // body
+      p.rect(x, y + 4, COFFEE.w, 13, '#3a3a46');
+      p.rect(x, y + 4, 1, 13, '#4d4d5a');
+      p.rect(x + COFFEE.w - 1, y + 4, 1, 13, '#2a2a33');
+      p.rect(x, y + 4, COFFEE.w, 1, '#55556a');
+      p.px(x + 2, y + 6, '#9a94a3');
+      p.px(x + 4, y + 6, '#9a94a3');
+      // brew recess, spout, cup on the drip tray
+      p.rect(x + 2, y + 8, 7, 7, '#1d1d24');
+      p.rect(x + 4, y + 8, 3, 2, '#9a94a3');
+      p.rect(x + 3, y + 12, 5, 3, '#e9e4da');
+      p.rect(x + 3, y + 12, 5, 1, '#5a3420');
+      p.px(x + 8, y + 13, '#e9e4da');
+      p.rect(x + 1, y + 15, 9, 1, '#6a6a7a');
+      p.rect(x, y + 17, COFFEE.w, 1, '#26262c');
+      // drip
+      const brewing = s.mode === 'break';
+      if (brewing ? Math.floor(t * 6) % 3 !== 0 : t % 3 < 0.3) p.px(x + 5, y + 10 + (Math.floor(t * 8) % 2), '#5a3420');
+    },
+  },
+  {
+    layer: 'glow',
+    draw(p, s, { lift }) {
+      const y = DESK.top - lift - COFFEE.h;
+      const shake = gurgling(s) && Math.floor(s.time * 14) % 2 ? 1 : 0;
+      p.px(COFFEE.x + 8 + shake, y + 6, s.mode === 'break' ? (Math.floor(s.time * 2) % 2 ? '#5fbf77' : '#3f8f57') : '#d9534f');
+    },
+  },
+  {
+    layer: 'top',
+    draw(p, s, { lift }) {
+      const t = s.time;
+      const y = DESK.top - lift - COFFEE.h;
+      // wisps over the cup
+      for (let i = 0; i < 2; i++) {
+        const k = (t * 0.5 + i / 2) % 1;
+        p.px(COFFEE.x + 5 + Math.round(Math.sin(t * 2 + i * 3) * 1.2), y + 11 - k * 6, `rgba(255,255,255,${(0.4 * (1 - k)).toFixed(2)})`);
+      }
+      if (s.mode !== 'break') return;
+      // gurgle: puffs from the top vent
+      for (let i = 0; i < 3; i++) {
+        const k = (t * 0.7 + i / 3) % 1;
+        const a = (0.55 * (1 - k)).toFixed(2);
+        const px = COFFEE.x + 7 + Math.round(k * 4 + Math.sin(t * 1.5 + i) * 1.5);
+        const py = Math.round(y - 1 - k * 12);
+        const r = k < 0.3 ? 1 : 2;
+        p.rect(px, py, r + 1, r, `rgba(255,255,255,${a})`);
+        p.px(px + 1, py - 1, `rgba(255,255,255,${a})`);
+      }
+    },
+  },
+];
+
+// ── snow globe at the left end of the desk ──
+const snowGlobeX = (s: RenderScene) => (s.items.has('triple-monitor') ? 100 : 92);
+const snowGlobe: ItemArt[] = [
+  {
+    layer: 'behind-char',
+    draw(p, s, { lift }) {
+      const t = s.time;
+      const cx = snowGlobeX(s);
+      const cy = DESK.top - lift - 8;
+      // wooden base
+      p.rect(cx - 3, cy + 5, 7, 3, '#7a4e2c');
+      p.rect(cx - 3, cy + 5, 7, 1, '#a0703f');
+      p.px(cx, cy + 6, '#f2b134');
+      // glass ball with a tiny snowy tree
+      p.disc(cx, cy, 4, '#7fa8bf');
+      p.disc(cx, cy, 3, '#cfe8f5');
+      p.rect(cx - 2, cy + 2, 5, 1, '#ffffff');
+      p.rect(cx - 1, cy + 1, 3, 1, '#f3f7fa');
+      p.px(cx, cy - 1, '#3e9148');
+      p.rect(cx - 1, cy, 3, 1, '#2f7a3a');
+      p.px(cx - 2, cy - 2, '#ffffff');
+      // flakes: settle slowly, swirl up every so often
+      const c = t % 16;
+      const swirl = c < 4;
+      for (let i = 0; i < 4; i++) {
+        let fx: number;
+        let fy: number;
+        if (swirl) {
+          const a = t * 4 + i * 1.6;
+          const r = 1 + (i % 2);
+          fx = cx + Math.round(Math.cos(a) * r);
+          fy = cy - 1 + Math.round(Math.sin(a) * r);
+        } else {
+          const k = Math.min(1, (c - 4) / (6 + i * 1.5));
+          fx = cx - 2 + ((i * 3) % 5);
+          fy = cy - 2 + Math.round(k * (3 - (i % 2)));
+        }
+        p.px(fx, fy, '#ffffff');
+      }
+      p.px(cx + 2, cy + 1, '#a9cfe2'); // glass shading
+    },
+  },
+];
+
+// ── desk fan (oscillates, blows at him) ──
+const FAN = { x: 125, y: 71 };
+const deskFan: ItemArt[] = [
+  {
+    layer: 'behind-char',
+    draw(p, s, { lift }) {
+      const t = s.time;
+      const x = FAN.x;
+      const y = FAN.y - lift;
+      const base = DESK.top - lift;
+      const body = '#7fc9b5';
+      const shade = '#5fa89a';
+      // base + neck
+      p.rect(x - 4, base - 2, 9, 2, shade);
+      p.rect(x - 4, base - 2, 9, 1, body);
+      p.rect(x, y + 5, 2, base - 2 - (y + 5), shade);
+      p.px(x, y + 5, body);
+      // head turns between facing us (k=0) and facing him (k=1)
+      const k = (Math.sin(t * 0.6) + 1) / 2;
+      const rx = Math.max(2, Math.round(5 - 3 * k));
+      if (k > 0.35) p.rect(x - rx - 2, y - 1, 3, 3, shade); // motor housing behind
+      for (let dy = -5; dy <= 5; dy++) {
+        const w = Math.round(rx * Math.sqrt(Math.max(0, 1 - (dy / 5.4) ** 2)));
+        p.rect(x - w, y + dy, w * 2 + 1, 1, '#dcefeb');
+      }
+      // spinning blades
+      for (let b = 0; b < 3; b++) {
+        const a = t * 22 + b * 2.094;
+        for (let r = 1; r <= 4; r++) p.px(x + Math.round(Math.cos(a) * r * (rx / 5)), y + Math.round(Math.sin(a) * r), r < 4 ? '#5fa89a' : '#9fd6c8');
+      }
+      // grille rim + hub
+      for (let a = 0; a < Math.PI * 2; a += 0.15) p.px(x + Math.round(Math.cos(a) * rx), y + Math.round(Math.sin(a) * 5), '#6f8a90');
+      p.px(x, y, '#f3ead8');
+      p.px(x - rx + 1, y - 3, '#ffffff');
+    },
+  },
+  {
+    layer: 'top',
+    draw(p, s, { lift }) {
+      const t = s.time;
+      const k = (Math.sin(t * 0.6) + 1) / 2;
+      if (k < 0.4) return;
+      // breeze streaks drifting toward him
+      for (let i = 0; i < 3; i++) {
+        const q = (t * 0.9 + i / 3) % 1;
+        const x = FAN.x + 5 + Math.round(q * 14);
+        const y = FAN.y - lift - 4 + i * 3 + Math.round(Math.sin(q * 6 + i) * 1);
+        p.rect(x, y, 3, 1, `rgba(255,255,255,${((0.5 * Math.sin(q * Math.PI) * (k - 0.4)) / 0.6).toFixed(2)})`);
+      }
+    },
+  },
+];
+
+// ── desk globe (right of the mug) ──
+const GLOBE = { x: 189, y: 73 };
+const GLOBE_MAP = [
+  '........................',
+  '..##.......###....#.....',
+  '.####.....#####..###....',
+  '..###......###....##..#.',
+  '...##.......##.......##.',
+  '....#.......#.#......#..',
+  '.....#.......#..........',
+  '....##.................#',
+  '........................',
+];
+const studyGlobe: ItemArt[] = [
+  {
+    layer: 'behind-char',
+    draw(p, s, { lift, mode }) {
+      const { x } = GLOBE;
+      const y = GLOBE.y - lift;
+      const gold = '#c98f1f';
+      // stand
+      p.rect(x - 4, DESK.top - lift - 2, 9, 2, '#7a4e2c');
+      p.rect(x - 4, DESK.top - lift - 2, 9, 1, '#9a6a40');
+      p.rect(x, y + 5, 1, DESK.top - lift - 2 - (y + 5), gold);
+      // spinning globe: scroll a little world map across a squashed sphere
+      const spin = s.time * (mode === 'studying' ? 1.6 : 0.7);
+      for (let dy = -4; dy <= 4; dy++) {
+        const hw = Math.floor(Math.sqrt(16.5 - dy * dy));
+        for (let dx = -hw; dx <= hw; dx++) {
+          const u = Math.floor(Math.asin(dx / (hw + 0.5)) * 3.8 + spin) % 24;
+          const land = GLOBE_MAP[dy + 4][(u + 24) % 24] === '#';
+          const edge = dx === hw || (dx === hw - 1 && Math.abs(dy) < 3);
+          let c = land ? (edge ? '#3f8a48' : '#5fbf77') : edge ? '#2e6aa0' : '#3f86c7';
+          if (Math.abs(dy) === 4) c = '#e9f3f6';
+          p.px(x + dx, y + dy, c);
+        }
+      }
+      p.px(x - 2, y - 2, '#8fd3ff');
+      // meridian ring
+      for (let a = -2.3; a <= 0.8; a += 0.18) p.px(x + Math.round(Math.cos(a) * 5.5), y + Math.round(Math.sin(a) * 5.5), gold);
+      p.px(x, y - 6, gold);
+    },
+  },
+];
+
+// ── jack-o'-lantern (floor, between the terrarium and the cabinet) ──
+const PUMPKIN = { x: 194, y: 117 };
+const PUMPKIN_FACE: [number, number][] = [
+  [-3, -1], [-4, 0], [-3, 0], [-2, 0],
+  [2, -1], [1, 0], [2, 0], [3, 0],
+  [0, 1],
+  [-3, 2], [-2, 2], [0, 2], [2, 2], [3, 2],
+  [-2, 3], [-1, 3], [1, 3], [2, 3],
+];
+const pumpkinFlicker = (t: number) => 0.75 + 0.13 * Math.sin(t * 9) + 0.12 * Math.sin(t * 23 + 1);
+const pumpkinLantern: ItemArt[] = [
+  {
+    layer: 'behind-char',
+    draw(p) {
+      const { x, y } = PUMPKIN;
+      p.ellipse(x, y + 5, 7, 1, 'rgba(40,20,10,0.25)');
+      p.ellipse(x, y, 6, 5, '#e07b39');
+      p.rect(x - 6, y - 1, 12, 3, '#e07b39');
+      for (const rx of [-4, 0, 3]) p.line(x + rx, y - 3, x + rx + (rx < 0 ? -1 : rx > 0 ? 1 : 0), y + 3, '#c9652a');
+      p.rect(x - 5, y - 3, 2, 2, '#f2a65a');
+      p.rect(x - 1, y - 7, 2, 3, '#5a7a2a');
+      p.px(x + 1, y - 7, '#6a8a3a');
+      for (const [dx, dy] of PUMPKIN_FACE) p.px(x + dx, y + dy, '#4a2510');
+    },
+  },
+  {
+    layer: 'glow',
+    draw(p, s, { night }) {
+      if (night < 0.15) return;
+      const f = pumpkinFlicker(s.time);
+      const { x, y } = PUMPKIN;
+      const a = Math.min(1, night * 1.4) * f;
+      for (const [dx, dy] of PUMPKIN_FACE) p.px(x + dx, y + dy, `rgba(255,${190 + Math.round(40 * f)},70,${a.toFixed(2)})`);
+      additive(p, () => glowSprite(p, x, y, 18, [255, 150, 50], 0.36 * night * f));
+    },
+  },
+];
+
+// ── festive tree (right corner, in front of the bookshelf) ──
+const TREE = { x: 231, top: 88, base: 114 };
+const TREE_TIERS = [
+  [88, 96, 1, 5],
+  [94, 105, 2, 7],
+  [103, 114, 3, 8],
+];
+const treeHalf = (y: number) => {
+  let w = -1;
+  for (const [ya, yb, wa, wb] of TREE_TIERS) if (y >= ya && y <= yb) w = Math.max(w, Math.round(lerp(wa, wb, (y - ya) / (yb - ya))));
+  return w;
+};
+const TREE_LIGHTS = (() => {
+  const out: { x: number; y: number; c: number }[] = [];
+  let k = 0;
+  for (let y = TREE.top + 3; y < TREE.base - 1; y += 3) {
+    const hw = treeHalf(y);
+    for (let dx = -hw + 1 + (y % 2); dx < hw; dx += 4) out.push({ x: TREE.x + dx, y, c: k++ % 5 });
+  }
+  return out;
+})();
+const festiveTree: ItemArt[] = [
+  {
+    layer: 'behind-char',
+    draw(p) {
+      const { x, top, base } = TREE;
+      // trunk + red bucket
+      p.rect(x - 1, base, 3, 3, '#6a4226');
+      p.rect(x - 4, base + 2, 9, 5, '#c0392b');
+      p.rect(x - 4, base + 2, 9, 1, '#d9534f');
+      p.rect(x - 4, base + 4, 9, 1, '#f2b134');
+      for (let y = top; y <= base; y++) {
+        const hw = treeHalf(y);
+        if (hw < 0) continue;
+        p.rect(x - hw, y, hw * 2 + 1, 1, '#2f7a3a');
+        p.px(x - hw, y, '#3e9148');
+        if (treeHalf(y + 1) < hw - 1 || y === base) p.rect(x - hw, y, hw * 2 + 1, 1, '#255f2e'); // tier hem
+      }
+      for (let y = top + 2; y < base; y += 2) p.px(x - Math.floor(treeHalf(y) / 2), y, '#4f9e48');
+      // tinsel swags
+      for (let i = 0; i < 3; i++) {
+        const y0 = 93 + i * 8;
+        for (let dx = -treeHalf(y0 + 2); dx <= treeHalf(y0 + 2); dx++) p.px(x + dx, y0 + Math.round(dx * 0.35) + 2, '#f2c95a');
+      }
+      // gifts
+      p.rect(218, 115, 7, 7, '#d9534f');
+      p.rect(221, 115, 1, 7, '#f2b134');
+      p.rect(218, 118, 7, 1, '#f2b134');
+      p.px(220, 114, '#f2b134');
+      p.px(222, 114, '#f2b134');
+      p.rect(234, 117, 6, 5, '#3f86c7');
+      p.rect(236, 117, 1, 5, '#f3ead8');
+      p.rect(234, 119, 6, 1, '#f3ead8');
+    },
+  },
+  {
+    layer: 'glow',
+    draw(p, s, { night, act }) {
+      const t = s.time;
+      const onBean = act === 'lounge' && s.items.has('beanbag');
+      const lights = TREE_LIGHTS.filter((L) => !(onBean && L.x < 228 && L.y >= 98));
+      for (const [i, L] of lights.entries()) {
+        const lvl = twinkle(t, i + 3);
+        p.px(L.x, L.y, lvl < 0.25 && night > 0.3 ? '#3a3a50' : BULB_COLS[L.c]);
+      }
+      // star
+      const { x, top } = TREE;
+      p.rect(x - 1, top - 3, 3, 3, '#f7d46b');
+      p.px(x, top - 4, '#f7d46b');
+      p.px(x - 2, top - 2, '#f7d46b');
+      p.px(x + 2, top - 2, '#f7d46b');
+      p.px(x, top - 2, '#fff6cf');
+      if (night < 0.05) return;
+      additive(p, () => {
+        glowSprite(p, x, top - 2, 9, [255, 220, 120], night * (0.35 + 0.15 * Math.sin(t * 2)));
+        lights.forEach((L, i) => {
+          if (i % 2 === 0) glowSprite(p, L.x, L.y, 5, BULB_RGB[L.c], night * 0.45 * twinkle(t, i + 3));
+        });
+      });
+    },
+  },
+];
+
+// ── friendly ghost: drifts around the room, sometimes peeks over the sofa ──
+const GHOST_ROWS = ['..#####..', '.#######.', '#######s#', '##k##k#s#', '##k##k#s#', '#p#####p#', '#######s#', '#######s#', '#######s#'];
+const GHOST_PAL = { '#': '#f4f4ff', s: '#d9dcf0', k: '#2d2d35', p: '#f7a6cf' };
+const GHOST = new Sprite(GHOST_ROWS, GHOST_PAL);
+const GHOST_LOOK_L = new Sprite(GHOST_ROWS.map((r) => (r.includes('k') ? '#k##k##s#' : r)), GHOST_PAL);
+const GHOST_BOO = new Sprite(GHOST_ROWS.map((r, i) => (i === 6 ? '###kk##s#' : i === 7 ? '###kk##s#' : r)), GHOST_PAL);
+const GHOST_HEM = [
+  ['#.##.##.#', '.#..#..#.'],
+  ['.##.##.##', '#..#..#..'],
+];
+const BOO_FONT: Record<string, string[]> = { b: ['#..', '#..', '###', '#.#', '###'], o: ['...', '...', '###', '#.#', '###'] };
+const GHOST_T = 64;
+const ghostPath = (t: number) => {
+  const u = t * 0.16;
+  return { x: 112 + 78 * Math.sin(u), y: 50 + 14 * Math.sin(2 * u + 0.6) };
+};
+/** Ghost position + whether it's hiding behind the sofa. */
+function ghostState(s: RenderScene) {
+  const t = s.time;
+  const c = t % GHOST_T;
+  const P = ghostPath(t);
+  const free = { ...P, hide: false, look: Math.cos(t * 0.16) < 0, boo: false };
+  if (!s.items.has('sofa') || c < 40) return free;
+  const S = { x: SOFA.x + 14, y: SOFA.top + 13 };
+  if (c < 43) {
+    const k = ease((c - 40) / 3);
+    const A = ghostPath(t - (c - 40));
+    return { x: lerp(A.x, S.x, k), y: lerp(A.y, S.y, k), hide: k > 0.75, look: S.x < A.x, boo: false };
+  }
+  if (c < 52) {
+    const k = c - 43; // rise, look around, boo, sink
+    const up = k < 1.5 ? k / 1.5 : k < 7.5 ? 1 : Math.max(0, 1 - (k - 7.5) / 1.5);
+    return { x: S.x, y: S.y - Math.round(up * 8), hide: true, look: k > 2.5 && k < 4.5, boo: k > 5 && k < 7 };
+  }
+  if (c < 56) return { x: S.x, y: S.y + 10, hide: true, look: false, boo: false }; // gone
+  const k = ease((c - 56) / 8);
+  return { x: lerp(S.x, P.x, k), y: lerp(S.y, P.y, k), hide: k < 0.15, look: P.x < S.x, boo: false };
+}
+function drawGhost(p: Painter, s: RenderScene, x: number, y: number, look: boolean, boo: boolean, alpha: number) {
+  const t = s.time;
+  x = Math.round(x);
+  y = Math.round(y + Math.sin(t * 2.2) * 1.5);
+  p.g.globalAlpha = alpha;
+  drawSprite(p, boo ? GHOST_BOO : look ? GHOST_LOOK_L : GHOST, x - 4, y - 11);
+  const hem = GHOST_HEM[Math.floor(t * 3) % 2];
+  hem.forEach((r, j) => {
+    for (let i = 0; i < r.length; i++) if (r[i] === '#') p.px(x - 4 + i, y - 2 + j, i === 7 ? GHOST_PAL.s : GHOST_PAL['#']);
+  });
+  p.g.globalAlpha = 1;
+}
+const ghostPlush: ItemArt[] = [
+  {
+    // peeking over the back of the sofa (the sofa, drawn later, hides its lower half)
+    layer: 'behind-char',
+    draw(p, s) {
+      const g = ghostState(s);
+      if (g.hide) drawGhost(p, s, g.x, g.y, g.look, g.boo, 0.85);
+    },
+  },
+  {
+    layer: 'top',
+    draw(p, s, { night }) {
+      const g = ghostState(s);
+      if (!g.hide) {
+        if (night > 0.05) additive(p, () => glowSprite(p, g.x, g.y - 5, 12, [190, 200, 255], 0.22 * night));
+        drawGhost(p, s, g.x, g.y, g.look, false, 0.72);
+      }
+      if (g.boo) {
+        // "boo" floating above
+        const bx = Math.round(g.x) - 5;
+        const by = Math.round(g.y) - 20;
+        p.g.globalAlpha = 0.9;
+        glyph(p, BOO_FONT.b, bx, by, '#c9b8ff');
+        glyph(p, BOO_FONT.o, bx + 4, by, '#c9b8ff');
+        glyph(p, BOO_FONT.o, bx + 8, by, '#c9b8ff');
+        p.g.globalAlpha = 1;
+      }
+    },
+  },
+];
+
+// ───────────────────────── more pets ─────────────────────────
+
+// ── hamster in a cage at the right end of the desk ──
+const CAGE = { x: 200, w: 20, h: 14 };
+const HAM_PAL = { o: '#d08a3a', w: '#f6ecd9', k: '#1d1d24', p: '#f0a0a0' };
+const HAM = [new Sprite(['.oop.', 'oookp', 'w.w.w'], HAM_PAL), new Sprite(['.oop.', 'oookp', '.w.w.'], HAM_PAL)];
+const HAM_EAT = new Sprite(['.oop.', 'ooooo', 'wwokp'], HAM_PAL);
+const HAM_T = 40;
+const hamster: ItemArt[] = [
+  {
+    layer: 'behind-char',
+    draw(p, s, { lift }) {
+      const t = s.time;
+      const { x, w, h } = CAGE;
+      const y = DESK.top - lift - h;
+      const c = t % HAM_T;
+      // back panel + roof
+      p.rect(x + 1, y + 1, w - 2, 9, '#e3edf0');
+      p.rect(x + 2, y, w - 4, 1, '#9a97a6');
+      // bedding pile, food bowl, water bottle
+      p.rect(x + 2, y + 8, 7, 2, '#f3e2b0');
+      p.rect(x + 3, y + 7, 5, 1, '#f3e2b0');
+      for (let i = 0; i < 4; i++) p.px(x + 3 + i * 2, y + 8 + (i % 2), '#d9c38a');
+      p.rect(x + 9, y + 9, 3, 1, '#3f86c7');
+      p.px(x + 10, y + 8, '#8a5a35');
+      p.rect(x + 2, y + 2, 2, 4, '#9fd3ef');
+      p.px(x + 2, y + 2, '#e9f6fc');
+      p.px(x + 3, y + 6, '#9a94a3');
+      // wheel: spins while running, coasts otherwise
+      const wx = x + 14;
+      const wy = y + 5;
+      const running = c < 12;
+      const ang = running ? t * 9 : 12 * 9 + Math.min(c - 12, 2) * 2;
+      p.line(wx, wy, wx - 2, y + 9, '#9a94a3');
+      p.line(wx, wy, wx + 2, y + 9, '#9a94a3');
+      for (let b = 0; b < 4; b++) {
+        const a = ang + b * 1.571;
+        p.line(wx, wy, wx + Math.round(Math.cos(a) * 3), wy + Math.round(Math.sin(a) * 3), '#f0b8b4');
+      }
+      for (let a = 0; a < Math.PI * 2; a += 0.25) p.px(wx + Math.round(Math.cos(a) * 3.6), wy + Math.round(Math.sin(a) * 3.6), '#d9534f');
+      p.px(wx, wy, '#9a94a3');
+      // hamster: wheel → bowl → bed → wheel
+      const W = { x: wx - 2, y: wy + 1 };
+      const B = { x: x + 9, y: y + 7 };
+      const N = { x: x + 3, y: y + 6 };
+      const walk = (a: Pt, b: Pt, k: number, left: boolean) => drawSprite(p, HAM[Math.floor(t * 10) % 2], Math.round(lerp(a.x, b.x, k)), Math.round(lerp(a.y, b.y, k)), left);
+      if (running) drawSprite(p, HAM[Math.floor(t * 14) % 2], W.x, W.y);
+      else if (c < 14) walk(W, B, (c - 12) / 2, true);
+      else if (c < 20) {
+        drawSprite(p, HAM_EAT, B.x, B.y, true);
+        if (Math.floor(t * 6) % 2) p.px(B.x + 4, B.y + 1, HAM_PAL.o); // munching, cheek puffs
+      } else if (c < 22) walk(B, N, (c - 20) / 2, true);
+      else if (c < 36) {
+        // curled up asleep in the bedding
+        const br = Math.sin(t * 2) > 0 ? 1 : 0;
+        p.rect(N.x, N.y + 1, 4, 2, HAM_PAL.o);
+        p.rect(N.x + 1, N.y + 1 - br, 2, 1, HAM_PAL.o);
+        p.px(N.x + 3, N.y + 1, HAM_PAL.p);
+        p.px(N.x + 1, N.y + 2, HAM_PAL.w);
+        if (Math.floor(t / 1.5) % 2 === 0) p.px(N.x + 5, N.y - 2 - (Math.floor(t * 2) % 2), '#8a8aa0');
+      } else walk(N, W, (c - 36) / 4, false);
+      // bars, blue tray underneath
+      for (let bx = x + 5; bx < x + w - 2; bx += 4) p.rect(bx, y + 1, 1, 9, 'rgba(130,130,148,0.55)');
+      p.rect(x + 1, y + 1, 1, 9, '#9a97a6');
+      p.rect(x + w - 2, y + 1, 1, 9, '#9a97a6');
+      p.rect(x, y + 10, w, 4, '#3f86c7');
+      p.rect(x, y + 10, w, 1, '#5ea2de');
+      p.rect(x, y + 13, w, 1, '#2f6aa0');
+    },
+  },
+];
+
+// ── parrot: see above (sill) ──
+
+// ── robot vacuum: roams the rug, docks under the desk; the cat hitches rides ──
+const VAC_DOCK = { x: 126, y: 107 };
+const VAC_PARK = { x: 146, y: 140 };
+type VacSeg = [number, number, Pt, Pt, boolean];
+/** Timeline on the cat's clock (CAT_T): [from, to, a, b, bumpAtEnd]. */
+const VAC_SEGS: VacSeg[] = (() => {
+  const P = VAC_PARK;
+  const D = VAC_DOCK;
+  const A1 = { x: 178, y: 134 };
+  const A2 = { x: 160, y: 128 };
+  const A3 = { x: 120, y: 132 };
+  const U = { x: 126, y: 124 };
+  const R1 = { x: 104, y: 134 };
+  const R2 = { x: 170, y: 128 };
+  const R3 = { x: 134, y: 138 };
+  const R4 = { x: 192, y: 137 };
+  return [
+    [1, 5, P, A1, false],
+    [5, 8, A1, A2, false],
+    [8, 12, A2, A3, false],
+    [12, 15, A3, P, false],
+    [16, 18.5, P, U, false],
+    [18.5, 21, U, D, false],
+    [40, 42.5, D, U, false],
+    [42.5, 45.5, U, R1, true],
+    [46, 50, R1, R2, true],
+    [50.5, 53, R2, R3, false],
+    [53, 56.5, R3, R4, true],
+    [57, 61, R4, P, false],
+  ];
+})();
+function vacState(c: number) {
+  for (let i = 0; i < VAC_SEGS.length; i++) {
+    const [t0, t1, a, b, bump] = VAC_SEGS[i];
+    const dir = b.x >= a.x ? 1 : -1;
+    if (c >= t0 && c < t1) {
+      const k = (c - t0) / (t1 - t0);
+      return { x: lerp(a.x, b.x, k), y: lerp(a.y, b.y, k), dir, moving: true, bump: 0 };
+    }
+    const next = VAC_SEGS[i + 1];
+    if (c >= t1 && (!next || c < next[0])) {
+      // waiting at b (just bumped into something?)
+      const since = c - t1;
+      const bp = bump && since < 0.5 ? 1 - since / 0.5 : 0;
+      return { x: b.x - dir * Math.round(bp * 2), y: b.y, dir: bp > 0 ? dir : next ? (next[3].x >= next[2].x ? 1 : -1) : dir, moving: false, bump: bp };
+    }
+  }
+  // before the first segment of the cycle: parked
+  return { x: VAC_PARK.x, y: VAC_PARK.y, dir: 1, moving: false, bump: 0 };
+}
+const vacDocked = (c: number) => c >= 21 && c < 40;
+function drawVacuum(p: Painter, x: number, y: number, dir: number, t: number, moving: boolean, led: string) {
+  x = Math.round(x);
+  y = Math.round(y);
+  p.rect(x - 5, y + 1, 11, 1, 'rgba(0,0,0,0.18)');
+  p.ellipse(x, y - 1, 6, 2, '#26262c');
+  p.ellipse(x, y - 3, 6, 2, '#44444f');
+  p.rect(x - 3, y - 4, 6, 1, '#5a5a68');
+  p.rect(dir > 0 ? x + 4 : x - 6, y - 2, 2, 2, '#1d1d24'); // bumper
+  p.rect(x - 1, y - 4, 2, 1, '#2a2a33');
+  p.px(x + dir * 2 - (dir > 0 ? 0 : 1), y - 3, led);
+  if (moving) p.px(x + dir * 5 + (Math.floor(t * 12) % 2 ? 0 : dir), y, '#9a94a3'); // side brush
+}
+const robotVacuum: ItemArt[] = [
+  {
+    layer: 'floor',
+    draw(p) {
+      // charging dock against the skirting under the desk
+      const { x } = VAC_DOCK;
+      p.rect(x - 5, 98, 10, 7, '#2d2d35');
+      p.rect(x - 5, 98, 10, 1, '#45454f');
+      p.rect(x - 3, 104, 6, 1, '#1d1d24');
+    },
+  },
+  {
+    layer: 'screen',
+    draw(p, s) {
+      const c = s.time % CAT_T;
+      p.px(VAC_DOCK.x, 100, vacDocked(c) ? (Math.floor(s.time * 1.5) % 2 ? '#5fbf77' : '#2f6f47') : '#4aa3ff');
+    },
+  },
+  {
+    layer: 'front',
+    draw(p, s, ctx) {
+      const t = s.time;
+      const c = t % CAT_T;
+      const v = vacState(c);
+      const led = vacDocked(c) ? '#5fbf77' : v.moving ? '#5fd0ff' : '#9fc3d6';
+      drawVacuum(p, v.x, v.y, v.dir, t, v.moving, led);
+      if (v.bump > 0) {
+        // little bonk lines
+        const bx = Math.round(v.x) + v.dir * 8;
+        const by = Math.round(v.y) - 5;
+        p.px(bx, by, '#f2b134');
+        p.px(bx + v.dir, by - 2, '#f2b134');
+        p.px(bx + v.dir, by + 2, '#f2b134');
+      }
+      if (!s.items.has('cat')) return;
+      // the cat hops on for a ride while it would otherwise be napping
+      const S = catSpots(s, ctx.lift).S;
+      if (c < 1) {
+        const k = c;
+        catWalk(p, 0, lerp(S.x, VAC_PARK.x, k), lerp(S.y, VAC_PARK.y - 4, k) - Math.sin(k * Math.PI) * 8, false);
+      } else if (c < 15) catSit(p, t, v.x, v.y - 4, v.dir > 0, 'look');
+      else if (c < 16) {
+        const k = c - 15;
+        catWalk(p, 0, lerp(VAC_PARK.x, S.x, k), lerp(VAC_PARK.y - 4, S.y, k) - Math.sin(k * Math.PI) * 8, true);
+      }
+    },
+  },
+];
+
+// ───────────────────────── limited-time attire (drawn by character.ts) ─────────────────────────
+
+/** Hat ids drawn by drawLimitedHat. */
+export const LIMITED_HATS = ['witch-hat', 'santa-hat', 'bunny-ears'] as const;
+
+/**
+ * Seasonal hats, seen from behind, around head centre (hx, hy) — same frame as character.ts drawHat.
+ * `t` (optional, s.time) makes the bunny ears twitch.
+ */
+export function drawLimitedHat(p: Painter, id: string, hx: number, hy: number, t = 0) {
+  if (id === 'witch-hat') {
+    const c = '#3a3245';
+    const dk = '#2a2433';
+    p.ellipse(hx, hy - 2, 13, 2, dk);
+    p.rect(hx - 12, hy - 2, 25, 1, c);
+    for (let i = 0; i < 15; i++) {
+      const w = Math.max(1, Math.round(13 - i * 0.9));
+      const bend = i > 9 ? -(i - 9) : 0; // crumpled tip flopping left
+      p.rect(hx - Math.floor(w / 2) + bend, hy - 3 - i, w, 1, c);
+      p.px(hx - Math.floor(w / 2) + bend, hy - 3 - i, dk);
+    }
+    p.px(hx - 7, hy - 17, c);
+    p.rect(hx - 6, hy - 6, 13, 2, '#8e5ea2'); // purple band
+    p.rect(hx - 6, hy - 6, 13, 1, '#b07cc6');
+    // stitched patch
+    p.rect(hx + 1, hy - 11, 3, 3, '#5a4a6a');
+    p.px(hx + 1, hy - 11, '#a89ab8');
+    p.px(hx + 3, hy - 9, '#a89ab8');
+    return;
+  }
+  if (id === 'santa-hat') {
+    const red = '#d23a2a';
+    const sh = '#a82a22';
+    p.disc(hx, hy - 4, 7, red);
+    // floppy tip falling to his right
+    const tip: [number, number, number][] = [
+      [hx + 2, hy - 11, 4],
+      [hx + 5, hy - 12, 3],
+      [hx + 8, hy - 11, 3],
+      [hx + 10, hy - 9, 2],
+      [hx + 11, hy - 7, 2],
+    ];
+    for (const [x, y, w] of tip) p.rect(x, y, w, w, red);
+    p.line(hx - 4, hy - 9, hx + 4, hy - 4, sh);
+    p.px(hx + 9, hy - 9, sh);
+    p.px(hx - 3, hy - 9, '#e85a44');
+    // fluffy cuff
+    p.rect(hx - 8, hy - 3, 17, 4, '#f3ead8');
+    for (let x = hx - 8; x <= hx + 8; x += 2) p.px(x, hy - 4, '#f3ead8');
+    for (let x = hx - 7; x <= hx + 7; x += 3) p.px(x, hy, '#d9cfc0');
+    p.px(hx - 8, hy - 3, '#ffffff');
+    // pompom
+    p.disc(hx + 12, hy - 5, 2, '#ffffff');
+    p.px(hx + 13, hy - 4, '#d9cfc0');
+    return;
+  }
+  if (id === 'bunny-ears') {
+    const fur = '#f6f2ea';
+    const fsh = '#d9cfc0';
+    // headband arcing over the hair
+    for (let dx = -7; dx <= 7; dx++) p.px(hx + dx, Math.round(hy - 1 - 7 * Math.sqrt(Math.max(0, 1 - (dx / 7.6) ** 2))), '#f48fb1');
+    // upright ear (twitches now and then)
+    const tw = t % 4.3 < 0.18 ? 1 : 0;
+    p.rect(hx - 5 - tw, hy - 18, 3, 10, fur);
+    p.px(hx - 4 - tw, hy - 19, fur);
+    p.rect(hx - 3 - tw, hy - 17, 1, 9, fsh);
+    // floppy ear folding over to the right, showing its pink inside
+    p.rect(hx + 2, hy - 15, 3, 7, fur);
+    p.rect(hx + 3, hy - 17, 3, 2, fur);
+    p.rect(hx + 5, hy - 16, 3, 2, fur);
+    p.rect(hx + 7, hy - 14, 2, 3, fur);
+    p.rect(hx + 6, hy - 15, 2, 1, '#f7b8cf');
+    p.px(hx + 4, hy - 9, fsh);
+    p.px(hx + 8, hy - 12, fsh);
+  }
+}
+
+/** Seasonal face items seen from behind (sunglasses): thick temple arms + dark lens corners at the sides. */
+export function drawLimitedFace(p: Painter, id: string, hx: number, hy: number) {
+  if (id !== 'sunglasses') return;
+  const c = '#1d1d24';
+  p.rect(hx - 10, hy - 1, 4, 2, c);
+  p.rect(hx + 7, hy - 1, 4, 2, c);
+  p.px(hx - 6, hy + 1, c);
+  p.px(hx + 6, hy + 1, c);
+  p.rect(hx - 12, hy - 2, 2, 3, '#26262c');
+  p.rect(hx + 11, hy - 2, 2, 3, '#26262c');
+  p.px(hx - 12, hy - 2, '#ff9ecb');
+  p.px(hx + 12, hy - 2, '#6ec3ff');
+}
+
 // ───────────────────────── registry ─────────────────────────
 
 export const ITEM_ART: Record<string, ItemArt[]> = {
@@ -1212,6 +2492,11 @@ export const ITEM_ART: Record<string, ItemArt[]> = {
   'fairy-lights': fairyLights,
   bookshelf,
   poster,
+  'neon-sign': neonSign,
+  'red-lanterns': redLanterns,
+  'harvest-wreath': harvestWreath,
+  'heart-lamp': heartLamp,
+  guitar,
   // floor (back to front)
   rug,
   'floor-lamp': floorLamp,
@@ -1227,10 +2512,26 @@ export const ITEM_ART: Record<string, ItemArt[]> = {
   'monitor-light': monitorLight,
   'rgb-keyboard': rgbKeyboard,
   'desk-lamp': deskLamp,
+  'snow-globe': snowGlobe,
+  'desk-fan': deskFan,
+  'study-globe': studyGlobe,
+  'coffee-machine': coffeeMachine,
+  // on the window sill / over the view
+  'bat-garland': batGarland,
+  telescope,
+  'flower-vase': flowerVase,
+  // floor decor in front of the desk
+  'record-player': recordPlayer,
+  'pumpkin-lantern': pumpkinLantern,
+  'festive-tree': festiveTree,
   // foreground furniture (in front of the character when he sits in it)
   sofa,
   beanbag,
+  'ghost-plush': ghostPlush,
   // pets last so they walk in front of furniture
+  hamster,
+  parrot,
+  'robot-vacuum': robotVacuum,
   dog: [dogBed, { layer: 'front', draw: drawDog }],
   cat: [{ layer: 'front', draw: drawCat }],
 };

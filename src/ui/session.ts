@@ -7,6 +7,7 @@ import { formatCoins, formatMult, formatShort } from './format';
 import { openModal, toast, type ModalHandle } from './overlay';
 import { sessionStatus, streakMessage } from './viewmodel';
 import type { Ctx } from './context';
+import { createSubjectPicker } from './subjects';
 
 export interface SessionController {
   start(): void;
@@ -93,6 +94,7 @@ function showSummary(ctx: Ctx, r: actions.EndResult, now: number) {
   const base = coinsFor(s.activeMs, 1);
   const unlocked = r.unlocked.map((id) => ACHIEVEMENTS.find((a) => a.id === id)).filter((a) => !!a);
   const reward = unlocked.reduce((t, a) => t + a.reward, 0);
+  const picker = createSubjectPicker(ctx, s.id);
   openModal({
     title: 'Session complete!',
     icon: '🎉',
@@ -122,7 +124,9 @@ function showSummary(ctx: Ctx, r: actions.EndResult, now: number) {
           )
         : null,
       h('p', { class: 'summary-streak' }, streakMessage(r.state, now)),
+      picker.el,
     ],
+    onClose: () => picker.save(),
     actions: [
       { label: 'Visit the shop', kind: 'ghost', onClick: () => ctx.showTab('shop') },
       { label: 'Nice!', kind: 'primary', autofocus: true },

@@ -266,6 +266,25 @@ export function createSettingsView(ctx: Ctx) {
     );
   }
 
+  /** Buddy & room: customise, share, speech bubbles (actions provided by the world layer). */
+  function buddySection() {
+    const s = ctx.store.get();
+    const btn = (label: string, kind: string, fn?: () => unknown) =>
+      fn ? h('button', { type: 'button', class: `btn btn-small ${kind}`, onclick: () => void fn() }, label) : null;
+    return section(
+      'Buddy & room',
+      h('p', { class: 'muted small' }, `${s.profile.appearance.name}’s look, the room and the view from the window.`),
+      h(
+        'div',
+        { class: 'btn-row' },
+        btn('✏️ Customise', 'btn-primary', ctx.openCustomize && (() => ctx.openCustomize?.())),
+        btn('📤 Share my room', 'btn-ghost', ctx.shareRoom),
+        btn('🔗 Copy visit link', 'btn-ghost', ctx.copyVisitLink),
+      ),
+      toggle('Speech bubbles', 'Your buddy chats, reacts and cheers you on', s.settings.bubbles !== false, (v) => update({ bubbles: v })),
+    );
+  }
+
   function section(title: string, ...children: (Node | null)[]) {
     return h('div', { class: 'card settings-card' }, h('h3', null, title), children);
   }
@@ -282,6 +301,7 @@ export function createSettingsView(ctx: Ctx) {
     mount(
       el,
       h('div', { class: 'view-head' }, h('h2', null, 'Settings')),
+      buddySection(),
       section(
         'Sound',
         toggle('Lo-fi music', 'Soft generated beats while you study', s.music, (v) => {

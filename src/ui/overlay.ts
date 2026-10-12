@@ -126,7 +126,7 @@ export function confirmDialog(title: string, text: string, okLabel = 'OK', dange
 }
 
 /** `key`: a newer toast with the same key replaces the older one. */
-export function toast(text: string, icon = '✨', ms = 4200, key?: string) {
+export function toast(text: string, icon = '✨', ms = 4200, key?: string): HTMLElement {
   if (key) toastRoot.querySelector(`[data-key="${key}"]`)?.remove();
   const el = h('div', { class: 'toast', role: 'status', 'data-key': key }, h('span', { class: 'toast-icon', 'aria-hidden': 'true' }, icon), h('span', null, text));
   toastRoot.appendChild(el);
@@ -135,4 +135,5 @@ export function toast(text: string, icon = '✨', ms = 4200, key?: string) {
     el.classList.add('closing');
     setTimeout(() => el.remove(), 250);
   }, ms);
+  return el;
 }

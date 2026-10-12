@@ -61,7 +61,9 @@ export type WorldEventKind =
   | 'plane'
   | 'helicopter'
   | 'fireflies'
-  | 'whale';
+  | 'whale'
+  /** a flock of birds crossing the sky */
+  | 'birds';
 
 export interface RenderEvents {
   onCar?: (dir: 1 | -1) => void;

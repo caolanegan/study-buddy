@@ -10,17 +10,21 @@
  *    into 'suspended' / 'interrupted' (phone call, Siri, backgrounding) gets resumed.
  *  - While the context is not 'running' nothing is scheduled, so no backlog of sounds
  *    bursts out when it resumes.
- *  - CPU: two shared noise buffers + one crackle buffer are generated once; continuous
- *    beds (rain, wind, crickets, fish tank, vinyl crackle) only exist while audible and are
- *    torn down after fading out; one-shot voices disconnect themselves in `onended`, and a
- *    voice cap drops purely decorative events (rain drops, key clicks) under load.
+ *  - CPU: shared white/brown noise + crackle buffers are generated once (pink noise lazily,
+ *    on first use); continuous beds (rain, wind, crickets, fish tank, vinyl crackle, room
+ *    tone, and the per-view waves / city hum / grass breeze / pines / stream / frogs) only
+ *    exist while audible and are torn down after fading out; one-shot voices disconnect
+ *    themselves in `onended`, and a voice cap drops purely decorative events (rain drops,
+ *    key clicks, trickles, scheduler-picked ambience) under load.
+ *  - Levels: everything outdoors sits behind a closed-window low-pass and well under the
+ *    music (beds ≥ 9 dB below the full groove; clear-weather beds ≥ 14 dB).
  *  - A single interval timer (100 ms) drives a lookahead scheduler that places events on
  *    `ctx.currentTime`.
  *
  * Signal flow
  *   music voices ─► musicIn ─► musicLP ─► musicBus ─┐
  *   indoor (typing, desk, pets) ─────────► ambBus ──┤
- *   outdoor (rain, birds, cars…) ► windowLP ► outdoorGain ► ambBus
+ *   outdoor (rain, view beds, birds…) ► windowLP ► outdoorGain ► ambBus
  *   UI sfx ───────────────────────────────► sfxBus ─┼─► mix ► toneLP ► compressor ► master ► out
  */
 
@@ -99,7 +103,7 @@ export const SFX_NAMES: readonly Sfx[] = [
 ];
 
 export interface PlayOptions {
-  /** Direction for 'car': 1 = left→right (default random), -1 = right→left. */
+  /** Direction for 'car' / 'whoosh': 1 = left→right (default random), -1 = right→left. */
   dir?: 1 | -1;
   /** Seconds from now to start the sound (default: immediately). */
   delay?: number;
@@ -267,11 +271,11 @@ export function loopLevels(s: AudioScene): Record<LoopId, number> {
   const night = s.isNight;
   const crickets = night && !wet && !snow && s.season <= 1 ? (s.season === 1 ? 1 : 0.6) : 0;
   return {
-    rain: storm ? 1 : s.weather === 'rain' ? 0.55 : 0,
+    rain: storm ? 0.55 : s.weather === 'rain' ? 0.45 : 0,
     crickets: crickets * CRICKETS_BY_VIEW[view],
-    wind: snow ? 0.6 : storm ? 0.5 : winter ? 0.3 : 0,
+    wind: snow ? 0.6 : storm ? 0.4 : winter ? 0.3 : 0,
     bubbles: s.pets.includes('fish-tank') ? 1 : 0,
-    waves: view === 'seaside' ? (storm ? 1.35 : snow ? 0.7 : 1) * (night ? 0.85 : 1) * (winter ? 0.85 : 1) : 0,
+    waves: view === 'seaside' ? (storm ? 0.95 : snow ? 0.7 : wet ? 0.85 : 1) * (night ? 0.85 : 1) * (winter ? 0.85 : 1) : 0,
     hum: view === 'city' ? (night ? 0.6 : 1) * (snow ? 0.5 : wet ? 0.8 : 1) : 0,
     breeze:
       view === 'countryside' && !storm && !snow
@@ -525,8 +529,9 @@ export class AudioEngine {
   }
 
   /**
-   * sfx = UI effects (coins, chimes…), music = lo-fi, typing = keyboard clicks,
-   * ambience = rain/weather loops, outdoor & pet sounds. typing/ambience default to `sfx` when omitted.
+   * sfx = UI effects & interactions (coins, chimes, boop, quest…; see `sfxChannel`), music = lo-fi,
+   * typing = keyboard clicks, ambience = weather/view beds, room tone, outdoor, world-event & pet
+   * sounds. typing/ambience default to `sfx` when omitted.
    */
   setEnabled(opts: { sfx: boolean; music: boolean; typing?: boolean; ambience?: boolean }): void {
     const musicWas = this.musicOn;
@@ -842,7 +847,7 @@ export class AudioEngine {
   private scheduleLoopEvents(now: number, horizon: number) {
     const rain = this.loops.get('rain');
     if (rain && rain.level > 0) {
-      const rate = 3 + rain.level * 9; // drops / s
+      const rate = 3 + rain.level * 8; // drops / s
       if (this.dropNext < now) this.dropNext = now + this.rnd() * 0.2;
       let guard = 0;
       while (this.dropNext < horizon && guard++ < 40) {
@@ -944,12 +949,13 @@ export class AudioEngine {
       this.nextAmbienceAt = now + nextAmbienceDelay(s, this.rnd);
     }
     if (s.weather === 'storm' && this.nextRumbleAt > 0 && now >= this.nextRumbleAt) {
-      this.rumble(now + 0.05, 0.35 + this.rnd() * 0.25);
+      this.rumble(now + 0.05, 0.1 + this.rnd() * 0.08);
       this.nextRumbleAt = now + 15 + this.rnd() * 30;
     }
   }
 
   private playAmbience(id: AmbienceId, t: number) {
+    if (this.voices > DECOR_VOICES) return; // purely decorative: drop under load
     switch (id) {
       case 'birds': return this.birds(t);
       case 'owl': return this.owl(t);
@@ -957,11 +963,11 @@ export class AudioEngine {
       case 'distant-dog': return this.bark(t, true);
       case 'car': return this.car(t, this.rnd() < 0.5 ? 1 : -1, CAR_AMBIENT);
       case 'mug': return this.mug(t);
-      case 'page': return this.page(t);
+      case 'page': return this.page(t, this.indoor, 0.8);
       case 'clock': return this.clock(t);
       case 'meow': return this.meow(t, 0.6);
-      case 'purr': return this.purr(t);
-      case 'bark': return this.bark(t, false, 0.6);
+      case 'purr': return this.purr(t, this.indoor, undefined, undefined, 0.6);
+      case 'bark': return this.bark(t, false, 0.5);
       case 'pant': return this.pant(t);
       case 'rustle': return this.rustle(t);
       case 'gull': return this.gull(t);
@@ -1346,8 +1352,175 @@ export class AudioEngine {
         out.connect(this.indoor);
         break;
       }
+      case 'room': {
+        // barely-there room tone so the gaps between sounds are not dead digital silence
+        const s = loopSrc(this.brown);
+        const lp = add(this.filter('lowpass', 220, 0.5));
+        s.connect(lp);
+        lp.connect(out);
+        out.connect(this.indoor);
+        break;
+      }
+      case 'waves': {
+        // pink-noise wash through a filter that the scheduler opens/closes per swell, plus a low body
+        const s = loopSrc(this.pink());
+        const lp = add(this.filter('lowpass', 420, 0.4));
+        const wash = add(ctx.createGain());
+        wash.gain.value = 0.18;
+        s.connect(lp);
+        lp.connect(wash);
+        wash.connect(out);
+        const s2 = loopSrc(this.brown);
+        const lp2 = add(this.filter('lowpass', 260, 0.5));
+        const body = add(ctx.createGain());
+        body.gain.value = 0.35;
+        s2.connect(lp2);
+        lp2.connect(body);
+        body.connect(out);
+        l.params.push(lp.frequency, wash.gain, body.gain);
+        this.waveNext = 0;
+        out.connect(this.outdoor);
+        break;
+      }
+      case 'hum': {
+        // far-off city: low traffic rumble + a faint wash, breathing very slowly
+        const s = loopSrc(this.brown);
+        const lp = add(this.filter('lowpass', 240, 0.5));
+        const amp = add(ctx.createGain());
+        amp.gain.value = 0.75;
+        const lfo = osc('sine', 0.045);
+        const lfoG = add(ctx.createGain());
+        lfoG.gain.value = 0.2;
+        lfo.connect(lfoG);
+        lfoG.connect(amp.gain);
+        s.connect(lp);
+        lp.connect(amp);
+        const s2 = loopSrc(this.pink());
+        const bp = add(this.filter('bandpass', 900, 0.5));
+        const g2 = add(ctx.createGain());
+        g2.gain.value = 0.12;
+        s2.connect(bp);
+        bp.connect(g2);
+        g2.connect(amp);
+        amp.connect(out);
+        out.connect(this.outdoor);
+        break;
+      }
+      case 'breeze': {
+        // wind combing through long grass: airy band that drifts in pitch and level
+        const s = loopSrc(this.pink());
+        const bp = add(this.filter('bandpass', 1700, 0.7));
+        const lfo = osc('sine', 0.06);
+        const lfoG = add(ctx.createGain());
+        lfoG.gain.value = 600;
+        lfo.connect(lfoG);
+        lfoG.connect(bp.frequency);
+        const amp = add(ctx.createGain());
+        amp.gain.value = 0.5;
+        const lfo2 = osc('sine', 0.085);
+        const lfo2G = add(ctx.createGain());
+        lfo2G.gain.value = 0.38;
+        lfo2.connect(lfo2G);
+        lfo2G.connect(amp.gain);
+        s.connect(bp);
+        bp.connect(amp);
+        amp.connect(out);
+        out.connect(this.outdoor);
+        break;
+      }
+      case 'pines': {
+        // soughing pines: low roar with a needle hiss riding the same gusts
+        const s = loopSrc(this.brown);
+        const bp = add(this.filter('bandpass', 520, 0.7));
+        const lfo = osc('sine', 0.05);
+        const lfoG = add(ctx.createGain());
+        lfoG.gain.value = 200;
+        lfo.connect(lfoG);
+        lfoG.connect(bp.frequency);
+        const amp = add(ctx.createGain());
+        amp.gain.value = 0.55;
+        const lfo2 = osc('sine', 0.07);
+        const lfo2G = add(ctx.createGain());
+        lfo2G.gain.value = 0.35;
+        lfo2.connect(lfo2G);
+        lfo2G.connect(amp.gain);
+        s.connect(bp);
+        bp.connect(amp);
+        const s2 = loopSrc(this.pink());
+        const hp = add(this.filter('highpass', 2800, 0.6));
+        const g2 = add(ctx.createGain());
+        g2.gain.value = 0.18;
+        s2.connect(hp);
+        hp.connect(g2);
+        g2.connect(amp);
+        amp.connect(out);
+        out.connect(this.outdoor);
+        break;
+      }
+      case 'stream': {
+        // brook: two noise bands, the upper one burbling; plus scheduled trickle plinks
+        const s = loopSrc(this.pink());
+        const bp = add(this.filter('bandpass', 1300, 0.9));
+        s.connect(bp);
+        bp.connect(out);
+        const s2 = loopSrc(this.white);
+        const bp2 = add(this.filter('bandpass', 3200, 1.4));
+        const amp = add(ctx.createGain());
+        amp.gain.value = 0.08;
+        const lfo = osc('sine', 0.33);
+        const lfoG = add(ctx.createGain());
+        lfoG.gain.value = 0.05;
+        lfo.connect(lfoG);
+        lfoG.connect(amp.gain);
+        s2.connect(bp2);
+        bp2.connect(amp);
+        amp.connect(out);
+        this.streamNext = 0;
+        out.connect(this.outdoor);
+        break;
+      }
+      case 'frogs': {
+        // two frogs: buzzy pulse trains through a throat band-pass; croaks are scheduled on the gains
+        [330, 470].forEach((f) => {
+          const o = osc('sawtooth', f + (this.rnd() - 0.5) * 40);
+          const bp = add(this.filter('bandpass', f * 2.2, 2.5));
+          const g = add(ctx.createGain());
+          g.gain.value = 0;
+          o.connect(bp);
+          bp.connect(g);
+          g.connect(out);
+          l.params.push(g.gain);
+        });
+        this.frogNext = [0, 0];
+        out.connect(this.outdoor);
+        break;
+      }
     }
     return l;
+  }
+
+  /** Pink noise (for waves/breeze/city), generated on first use only. */
+  private pink(): AudioBuffer {
+    if (this.pinkBuf) return this.pinkBuf;
+    const ctx = this.ctx!;
+    const sr = ctx.sampleRate;
+    const buf = ctx.createBuffer(1, Math.floor(sr * 4), sr);
+    const d = buf.getChannelData(0);
+    let b0 = 0, b1 = 0, b2 = 0;
+    for (let i = 0; i < d.length; i++) {
+      const w = this.rnd() * 2 - 1;
+      b0 = 0.99765 * b0 + w * 0.099;
+      b1 = 0.963 * b1 + w * 0.2965;
+      b2 = 0.57 * b2 + w * 1.0526;
+      d[i] = (b0 + b1 + b2 + w * 0.1848) * 0.11;
+    }
+    const xf = Math.min(2000, Math.floor(d.length / 4));
+    for (let i = 0; i < xf; i++) {
+      const k = i / xf;
+      d[i] = d[i] * k + d[d.length - xf + i] * (1 - k);
+    }
+    this.pinkBuf = buf;
+    return buf;
   }
 
   // ─────────── helpers ───────────
@@ -1360,12 +1533,35 @@ export class AudioEngine {
     return f;
   }
 
-  private noiseSrc(v: Voice, t: number, dur: number, buf: AudioBuffer = this.white): AudioBufferSourceNode {
+  private noiseSrc(v: Voice, t: number, dur: number, buf: AudioBuffer = this.white, rate = 1): AudioBufferSourceNode {
     const s = this.ctx!.createBufferSource();
     s.buffer = buf;
-    const maxOff = Math.max(0, buf.duration - dur - 0.01);
-    v.src(s, t, t + dur, this.rnd() * maxOff);
+    if (rate !== 1) s.playbackRate.value = rate;
+    const need = dur * rate;
+    if (need > buf.duration * 0.9) {
+      // longer than the shared buffer: loop it rather than running out early
+      s.loop = true;
+      v.src(s, t, t + dur, this.rnd() * buf.duration * 0.5);
+    } else {
+      v.src(s, t, t + dur, this.rnd() * Math.max(0, buf.duration - need - 0.01));
+    }
     return s;
+  }
+
+  /** Output chain for a distant outdoor sound: level → (extra distance low-pass) → pan → outdoor. */
+  private farOut(v: Voice, pan: number, level: number, lp?: number): GainNode {
+    const g = v.add(this.ctx!.createGain());
+    g.gain.value = level;
+    const p = this.panner(v, pan);
+    if (lp) {
+      const f = v.add(this.filter('lowpass', lp, 0.5));
+      g.connect(f);
+      f.connect(p);
+    } else {
+      g.connect(p);
+    }
+    p.connect(this.outdoor);
+    return g;
   }
 
   /** Stereo panner if supported, else a pass-through gain. */
@@ -1515,13 +1711,73 @@ export class AudioEngine {
         this.thunder(t);
         break;
       case 'car':
-        this.car(t, opts.dir ?? (r() < 0.5 ? 1 : -1), 0.4);
+        this.car(t, opts.dir ?? (r() < 0.5 ? 1 : -1), CAR_EVENT);
         break;
       case 'meow':
-        this.meow(t, 1);
+        this.meow(t, 0.75);
         break;
       case 'bark':
-        this.bark(t, false, 1);
+        this.bark(t, false, 0.6);
+        break;
+      // world events (ambience switch)
+      case 'balloon':
+        this.balloon(t);
+        break;
+      case 'fireworks':
+        this.fireworks(t);
+        break;
+      case 'train':
+        this.train(t, 1);
+        break;
+      case 'gull':
+        this.gull(t, 1.3);
+        break;
+      case 'owl':
+        this.owl(t);
+        break;
+      case 'chirp':
+        this.chirp(t);
+        break;
+      case 'whoosh':
+        this.whoosh(t, opts.dir ?? (r() < 0.5 ? 1 : -1));
+        break;
+      case 'horn':
+        this.shipHorn(t);
+        break;
+      // interactions (sfx switch)
+      case 'sparkle':
+        this.sparkle(t);
+        break;
+      case 'purr':
+        this.purr(t, sfx, 2, 0.95);
+        break;
+      case 'boop':
+        this.boop(t);
+        break;
+      case 'hey':
+        this.hey(t);
+        break;
+      case 'sip':
+        this.sip(t);
+        break;
+      case 'rustle':
+        this.rustle(t, sfx, 1.6);
+        break;
+      case 'tick':
+        this.clockTick(t);
+        break;
+      case 'pop':
+        this.blip(t, 480 + r() * 120, 0.06, 0.16, 'sine', sfx, 1500);
+        this.noiseHit(t, 0.008, 'bandpass', 2500, 1.5, 0.05, sfx);
+        break;
+      case 'paper':
+        this.paper(t);
+        break;
+      case 'quest':
+        this.quest(t);
+        break;
+      case 'level':
+        this.levelUp(t);
         break;
     }
   }
@@ -1579,13 +1835,13 @@ export class AudioEngine {
       o.type = 'sine';
       o.frequency.setValueAtTime(f, t);
       o.frequency.exponentialRampToValueAtTime(f * 1.6, t + 0.03);
-      this.env(g.gain, t, 0.002, 0.02 + 0.02 * level * r(), 0.04);
+      this.env(g.gain, t, 0.002, 0.014 + 0.014 * level * r(), 0.04);
       o.connect(g);
       v.src(o, t, t + 0.06);
     } else {
       const n = this.noiseSrc(v, t, 0.025);
       const bp = v.add(this.filter('bandpass', 1800 + r() * 4000, 3 + r() * 3));
-      this.env(g.gain, t, 0.001, 0.05 + 0.08 * level * r(), 0.02);
+      this.env(g.gain, t, 0.001, 0.025 + 0.035 * level * r(), 0.02);
       n.connect(bp);
       bp.connect(g);
     }
@@ -1624,15 +1880,15 @@ export class AudioEngine {
     lp.frequency.exponentialRampToValueAtTime(500, t + 0.7);
     const g = v.add(ctx.createGain());
     g.gain.setValueAtTime(MIN, t);
-    g.gain.linearRampToValueAtTime(0.45, t + 0.01);
-    g.gain.exponentialRampToValueAtTime(0.12, t + 0.15);
-    g.gain.linearRampToValueAtTime(0.3, t + 0.22); // second crackle
+    g.gain.linearRampToValueAtTime(0.2, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.06, t + 0.15);
+    g.gain.linearRampToValueAtTime(0.14, t + 0.22); // second crackle
     g.gain.exponentialRampToValueAtTime(MIN, t + 0.85);
     n.connect(lp);
     lp.connect(g);
     g.connect(p);
     this.commit(v);
-    this.rumble(t + 0.1, 0.75, 7);
+    this.rumble(t + 0.1, 0.3, 7);
   }
 
   private rumble(t: number, peak: number, dur = 4 + this.rnd() * 3) {
@@ -1707,7 +1963,7 @@ export class AudioEngine {
     const v = new Voice();
     const p = this.panner(v, r() * 1.6 - 0.8);
     const out = v.add(ctx.createGain());
-    out.gain.value = 0.22;
+    out.gain.value = 0.095;
     out.connect(p);
     p.connect(this.outdoor);
     const species = Math.floor(r() * 3);
@@ -1765,7 +2021,7 @@ export class AudioEngine {
       o.frequency.setValueAtTime(f * 1.04, ht);
       o.frequency.exponentialRampToValueAtTime(f * 0.95, ht + len);
       g.gain.setValueAtTime(MIN, ht);
-      g.gain.linearRampToValueAtTime(0.2, ht + 0.07);
+      g.gain.linearRampToValueAtTime(0.11, ht + 0.07);
       g.gain.exponentialRampToValueAtTime(MIN, ht + len);
     });
     const lp = v.add(this.filter('lowpass', 900, 0.7));
@@ -1809,7 +2065,7 @@ export class AudioEngine {
     const count = 1 + Math.floor(r() * 3);
     const f0 = (distant ? 230 : 260) + r() * 60;
     const out = v.add(ctx.createGain());
-    out.gain.value = (distant ? 0.18 : 0.32) * level;
+    out.gain.value = (distant ? 0.12 : 0.3) * level;
     const p = this.panner(v, distant ? r() * 1.6 - 0.8 : 0.35);
     out.connect(p);
     p.connect(distant ? this.outdoor : this.indoor);
@@ -1903,11 +2159,11 @@ export class AudioEngine {
     this.commit(v);
   }
 
-  private purr(t: number) {
+  private purr(t: number, dest: AudioNode = this.indoor, nBreaths?: number, breathPeriod?: number, level = 1) {
     const ctx = this.ctx!;
     const r = this.rnd;
-    const breaths = 4 + Math.floor(r() * 4);
-    const period = 1.3 + r() * 0.3;
+    const breaths = nBreaths ?? 4 + Math.floor(r() * 4);
+    const period = breathPeriod ?? 1.3 + r() * 0.3;
     const dur = breaths * period + 0.2;
     const v = new Voice();
     const n = this.noiseSrc(v, t, dur, this.brown);
@@ -1924,10 +2180,10 @@ export class AudioEngine {
     g.gain.setValueAtTime(MIN, t);
     for (let i = 0; i < breaths; i++) {
       const bt = t + i * period;
-      g.gain.linearRampToValueAtTime(0.32, bt + period * 0.25); // in
-      g.gain.linearRampToValueAtTime(0.12, bt + period * 0.5);
-      g.gain.linearRampToValueAtTime(0.42, bt + period * 0.72); // out
-      g.gain.linearRampToValueAtTime(0.06, bt + period);
+      g.gain.linearRampToValueAtTime(0.32 * level, bt + period * 0.25); // in
+      g.gain.linearRampToValueAtTime(0.12 * level, bt + period * 0.5);
+      g.gain.linearRampToValueAtTime(0.42 * level, bt + period * 0.72); // out
+      g.gain.linearRampToValueAtTime(0.06 * level, bt + period);
     }
     g.gain.linearRampToValueAtTime(MIN, t + dur);
     const p = this.panner(v, -0.3);
@@ -1935,12 +2191,12 @@ export class AudioEngine {
     lp.connect(am);
     am.connect(g);
     g.connect(p);
-    p.connect(this.indoor);
+    p.connect(dest);
     v.src(lfo, t, t + dur);
     this.commit(v);
   }
 
-  private rustle(t: number) {
+  private rustle(t: number, dest: AudioNode = this.indoor, level = 1) {
     const ctx = this.ctx!;
     const r = this.rnd;
     const v = new Voice();
@@ -1952,7 +2208,7 @@ export class AudioEngine {
     let tt = t + 0.01;
     for (let i = 0; i < bursts && tt < t + 0.75; i++) {
       g.gain.setValueAtTime(MIN, tt);
-      g.gain.linearRampToValueAtTime(0.04 + r() * 0.04, tt + 0.005);
+      g.gain.linearRampToValueAtTime((0.04 + r() * 0.04) * level, tt + 0.005);
       g.gain.exponentialRampToValueAtTime(MIN, tt + 0.02 + r() * 0.03);
       tt += 0.06 + r() * 0.12;
     }
@@ -1960,7 +2216,7 @@ export class AudioEngine {
     n.connect(hp);
     hp.connect(g);
     g.connect(p);
-    p.connect(this.indoor);
+    p.connect(dest);
     this.commit(v);
   }
 
@@ -1974,7 +2230,7 @@ export class AudioEngine {
     o.frequency.setValueAtTime(130, t);
     o.frequency.exponentialRampToValueAtTime(75, t + 0.08);
     const g = v.add(ctx.createGain());
-    this.env(g.gain, t, 0.003, 0.22, 0.12);
+    this.env(g.gain, t, 0.003, 0.14, 0.12);
     o.connect(g);
     g.connect(this.indoor);
     v.src(o, t, t + 0.15);
@@ -1983,13 +2239,13 @@ export class AudioEngine {
     const k = 0.9 + r() * 0.2;
     const ct = t + 0.015;
     [
-      [2100, 0.05, 0.35],
-      [3350, 0.035, 0.25],
-      [5150, 0.018, 0.15],
+      [2100, 0.035, 0.35],
+      [3350, 0.025, 0.25],
+      [5150, 0.012, 0.15],
     ].forEach(([f, a, d]) => this.blip(ct, f * k, d, a, 'sine', this.indoor));
   }
 
-  private page(t: number) {
+  private page(t: number, dest: AudioNode = this.indoor, level = 1) {
     const ctx = this.ctx!;
     const r = this.rnd;
     const dur = 0.6 + r() * 0.3;
@@ -2002,18 +2258,18 @@ export class AudioEngine {
     const hp = v.add(this.filter('highpass', 700, 0.7));
     const g = v.add(ctx.createGain());
     g.gain.setValueAtTime(MIN, t);
-    g.gain.linearRampToValueAtTime(0.1, t + 0.06);
-    g.gain.linearRampToValueAtTime(0.04, t + 0.14);
-    g.gain.linearRampToValueAtTime(0.18, t + dur * 0.45); // the flip
-    g.gain.linearRampToValueAtTime(0.05, t + dur * 0.7);
-    g.gain.linearRampToValueAtTime(0.08, t + dur * 0.8);
+    g.gain.linearRampToValueAtTime(0.1 * level, t + 0.06);
+    g.gain.linearRampToValueAtTime(0.04 * level, t + 0.14);
+    g.gain.linearRampToValueAtTime(0.18 * level, t + dur * 0.45); // the flip
+    g.gain.linearRampToValueAtTime(0.05 * level, t + dur * 0.7);
+    g.gain.linearRampToValueAtTime(0.08 * level, t + dur * 0.8);
     g.gain.exponentialRampToValueAtTime(MIN, t + dur);
     const p = this.panner(v, 0.1);
     n.connect(bp);
     bp.connect(hp);
     hp.connect(g);
     g.connect(p);
-    p.connect(this.indoor);
+    p.connect(dest);
     this.commit(v);
   }
 
@@ -2041,12 +2297,894 @@ export class AudioEngine {
     p.connect(this.indoor);
     this.commit(v);
   }
+  // ─────────── sound design: per-view outdoor ambience ───────────
+
+  /** Brook trickle: tiny bubbly plinks into the stream bed (scales with its level). */
+  private trickle(t: number, dest: AudioNode) {
+    if (this.voices > DECOR_VOICES) return;
+    const r = this.rnd;
+    const f = 700 + r() * 1100;
+    const v = new Voice();
+    const o = v.add(this.ctx!.createOscillator());
+    o.type = 'sine';
+    o.frequency.setValueAtTime(f, t);
+    o.frequency.exponentialRampToValueAtTime(f * (1.4 + r() * 0.6), t + 0.04);
+    const g = v.add(this.ctx!.createGain());
+    this.env(g.gain, t, 0.003, 0.12 + r() * 0.18, 0.045);
+    const p = this.panner(v, (r() - 0.5) * 1.2);
+    o.connect(g);
+    g.connect(p);
+    p.connect(dest);
+    v.src(o, t, t + 0.06);
+    this.commit(v);
+  }
+
+  /** Herring-gull calls far over the water: a long "kyow" then shorter ones, falling. */
+  private gull(t: number, level = 1) {
+    const ctx = this.ctx!;
+    const r = this.rnd;
+    const v = new Voice();
+    const out = this.farOut(v, r() * 1.6 - 0.8, 0.09 * level, 2800);
+    const bp = v.add(this.filter('bandpass', 1700, 1.6));
+    bp.connect(out);
+    const calls = 2 + Math.floor(r() * 4);
+    const f0 = 1050 + r() * 300;
+    let tt = t;
+    for (let c = 0; c < calls; c++) {
+      const len = c === 0 ? 0.3 + r() * 0.1 : 0.14 + r() * 0.08;
+      const f = f0 * (1 - c * 0.03);
+      const o = v.add(ctx.createOscillator());
+      o.type = 'sawtooth';
+      o.frequency.setValueAtTime(f * 1.1, tt);
+      o.frequency.linearRampToValueAtTime(f * 1.22, tt + len * 0.25);
+      o.frequency.exponentialRampToValueAtTime(f * 0.72, tt + len);
+      const g = v.add(ctx.createGain());
+      const pk = (c === 0 ? 1 : 0.75) * (0.7 + r() * 0.3);
+      g.gain.setValueAtTime(MIN, tt);
+      g.gain.linearRampToValueAtTime(pk, tt + 0.02);
+      g.gain.linearRampToValueAtTime(pk * 0.6, tt + len * 0.7);
+      g.gain.exponentialRampToValueAtTime(MIN, tt + len);
+      o.connect(g);
+      g.connect(bp);
+      v.src(o, tt, tt + len + 0.02);
+      tt += len + 0.07 + r() * 0.12;
+    }
+    this.commit(v);
+  }
+
+  /** Lighthouse diaphone far away: one long low note with the end "grunt", and a faint echo. */
+  private foghorn(t: number) {
+    const ctx = this.ctx!;
+    const r = this.rnd;
+    const f = 78 + r() * 12;
+    const pan = r() * 1.2 - 0.6;
+    for (let k = 0; k < 2; k++) {
+      const v = new Voice();
+      const st = t + k * 1.15;
+      const dur = 2.4 + r() * 0.6;
+      const out = this.farOut(v, k ? -pan * 0.5 : pan, k ? 0.018 : 0.05, k ? 260 : 380);
+      const g = v.add(ctx.createGain());
+      g.gain.setValueAtTime(MIN, st);
+      g.gain.linearRampToValueAtTime(1, st + 0.45);
+      g.gain.setValueAtTime(1, st + dur - 0.4);
+      g.gain.exponentialRampToValueAtTime(MIN, st + dur + 1.2);
+      g.connect(out);
+      for (const [type, m, a] of [['sawtooth', 1, 1], ['square', 1.004, 0.4]] as const) {
+        const o = v.add(ctx.createOscillator());
+        o.type = type;
+        o.frequency.setValueAtTime(f * m, st);
+        o.frequency.setValueAtTime(f * m, st + dur - 0.4);
+        o.frequency.exponentialRampToValueAtTime(f * m * 0.84, st + dur);
+        const og = v.add(ctx.createGain());
+        og.gain.value = a;
+        o.connect(og);
+        og.connect(g);
+        v.src(o, st, st + dur + 1.25);
+      }
+      this.commit(v);
+    }
+  }
+
+  /** Distant ship: two soft blasts of a low open fifth. */
+  private shipHorn(t: number) {
+    const ctx = this.ctx!;
+    const r = this.rnd;
+    const v = new Voice();
+    const f = 96 + r() * 12;
+    const out = this.farOut(v, r() * 1.2 - 0.6, 0.045, 650);
+    const g = v.add(ctx.createGain());
+    g.gain.setValueAtTime(MIN, t);
+    const blasts: [number, number][] = [[0, 0.9], [1.5, 1.8]];
+    for (const [s0, len] of blasts) {
+      g.gain.setValueAtTime(MIN, t + s0);
+      g.gain.linearRampToValueAtTime(1, t + s0 + 0.18);
+      g.gain.setValueAtTime(1, t + s0 + len);
+      g.gain.exponentialRampToValueAtTime(MIN, t + s0 + len + 0.5);
+    }
+    g.connect(out);
+    const end = t + 1.5 + 1.8 + 0.55;
+    for (const [m, a] of [[1, 1], [1.5, 0.55], [2.01, 0.25]] as const) {
+      const o = v.add(ctx.createOscillator());
+      o.type = 'sawtooth';
+      o.frequency.value = f * m;
+      const og = v.add(ctx.createGain());
+      og.gain.value = a;
+      o.connect(og);
+      og.connect(g);
+      v.src(o, t, end);
+    }
+    this.commit(v);
+  }
+
+  /** Halyards tapping masts in the marina: small inharmonic clinks. */
+  private rigging(t: number) {
+    const ctx = this.ctx!;
+    const r = this.rnd;
+    const v = new Voice();
+    const out = this.farOut(v, r() * 1.4 - 0.7, 0.05);
+    const clinks = 2 + Math.floor(r() * 4);
+    const base = 2100 + r() * 900;
+    let tt = t;
+    for (let i = 0; i < clinks; i++) {
+      const k = 0.94 + r() * 0.12;
+      const pk = 0.5 + r() * 0.5;
+      for (const [m, a, d] of [[1, 1, 0.25], [2.32, 0.5, 0.15], [3.9, 0.25, 0.08]] as const) {
+        const o = v.add(ctx.createOscillator());
+        o.type = 'sine';
+        o.frequency.value = base * k * m;
+        const g = v.add(ctx.createGain());
+        this.env(g.gain, tt, 0.002, a * pk, d);
+        o.connect(g);
+        g.connect(out);
+        v.src(o, tt, tt + d + 0.02);
+      }
+      tt += r() < 0.3 ? 0.08 + r() * 0.06 : 0.3 + r() * 0.7; // sometimes a quick double clink
+    }
+    this.commit(v);
+  }
+
+  /** A train crossing the far side of town: rolling rumble with rail-joint "da-dum"s. */
+  private train(t: number, level: number) {
+    const ctx = this.ctx!;
+    const r = this.rnd;
+    const dur = 9 + r() * 4;
+    const dir = r() < 0.5 ? 1 : -1;
+    const v = new Voice();
+    const p = this.panner(v, -0.7 * dir);
+    if (p.pan) {
+      p.pan.setValueAtTime(-0.7 * dir, t);
+      p.pan.linearRampToValueAtTime(0.7 * dir, t + dur);
+    }
+    const far = v.add(this.filter('lowpass', 1500, 0.5));
+    far.connect(p);
+    p.connect(this.outdoor);
+    const out = v.add(ctx.createGain());
+    out.gain.setValueAtTime(MIN, t);
+    out.gain.exponentialRampToValueAtTime(0.1 * level, t + dur * 0.45);
+    out.gain.setValueAtTime(0.1 * level, t + dur * 0.55);
+    out.gain.exponentialRampToValueAtTime(MIN, t + dur);
+    out.connect(far);
+    const n = this.noiseSrc(v, t, dur + 0.05, this.brown);
+    const lp = v.add(this.filter('lowpass', 380, 0.6));
+    n.connect(lp);
+    lp.connect(out);
+    const n2 = this.noiseSrc(v, t, dur + 0.05);
+    const bp = v.add(this.filter('bandpass', 1000 + r() * 300, 1.3));
+    const cg = v.add(ctx.createGain());
+    cg.gain.setValueAtTime(0, t);
+    const period = 0.62 + r() * 0.2;
+    for (let ct = t + 0.1; ct < t + dur - 0.3; ct += period) {
+      for (const [dt, a] of [[0, 0.9], [0.12, 0.75]] as const) {
+        const x = ct + dt;
+        cg.gain.setValueAtTime(0, x);
+        cg.gain.linearRampToValueAtTime(a, x + 0.004);
+        cg.gain.linearRampToValueAtTime(0, x + 0.05);
+      }
+    }
+    n2.connect(bp);
+    bp.connect(cg);
+    cg.connect(out);
+    this.commit(v);
+  }
+
+  /** A siren many blocks away: slow wail, swelling in and fading, drifting flat as it passes. */
+  private siren(t: number) {
+    const ctx = this.ctx!;
+    const r = this.rnd;
+    const dur = 7 + r() * 3;
+    const v = new Voice();
+    const out = this.farOut(v, r() * 1.4 - 0.7, 0.028, 1600);
+    const g = v.add(ctx.createGain());
+    g.gain.setValueAtTime(MIN, t);
+    g.gain.exponentialRampToValueAtTime(1, t + dur * 0.4);
+    g.gain.exponentialRampToValueAtTime(MIN, t + dur);
+    g.connect(out);
+    const o = v.add(ctx.createOscillator());
+    o.type = 'triangle';
+    o.frequency.value = 760 + r() * 60;
+    o.detune.setValueAtTime(40, t);
+    o.detune.linearRampToValueAtTime(-60, t + dur);
+    const lfo = v.add(ctx.createOscillator());
+    lfo.frequency.value = 0.32 + r() * 0.08;
+    const depth = v.add(ctx.createGain());
+    depth.gain.value = 170;
+    lfo.connect(depth);
+    depth.connect(o.frequency);
+    o.connect(g);
+    v.src(o, t, t + dur + 0.02);
+    v.src(lfo, t, t + dur + 0.02);
+    this.commit(v);
+  }
+
+  /** Pigeon on a ledge: "croo – COO – oo" with a little burble. */
+  private pigeon(t: number) {
+    const ctx = this.ctx!;
+    const r = this.rnd;
+    const v = new Voice();
+    const out = this.farOut(v, 0.3 + r() * 0.5, 0.13, 900);
+    const f = 300 + r() * 50;
+    const o = v.add(ctx.createOscillator());
+    o.type = 'triangle';
+    const am = v.add(ctx.createGain());
+    am.gain.value = 0.7;
+    const lfo = v.add(ctx.createOscillator());
+    lfo.frequency.value = 22 + r() * 6;
+    const depth = v.add(ctx.createGain());
+    depth.gain.setValueAtTime(0.3, t);
+    depth.gain.linearRampToValueAtTime(0.05, t + 0.5);
+    lfo.connect(depth);
+    depth.connect(am.gain);
+    const g = v.add(ctx.createGain());
+    g.gain.setValueAtTime(MIN, t);
+    const segs: [start: number, len: number, from: number, to: number, pk: number][] = [
+      [0, 0.24, 0.88, 1.0, 0.7],
+      [0.32, 0.5, 1.06, 0.94, 1],
+      [0.92, 0.28, 0.9, 0.84, 0.6],
+    ];
+    for (const [s0, len, a, b, pk] of segs) {
+      const st = t + s0;
+      o.frequency.setValueAtTime(f * a, st);
+      o.frequency.exponentialRampToValueAtTime(f * b, st + len);
+      g.gain.setValueAtTime(MIN, st);
+      g.gain.linearRampToValueAtTime(pk, st + 0.06);
+      g.gain.exponentialRampToValueAtTime(MIN, st + len);
+    }
+    o.connect(am);
+    am.connect(g);
+    g.connect(out);
+    v.src(o, t, t + 1.25);
+    v.src(lfo, t, t + 1.25);
+    this.commit(v);
+  }
+
+  /** Sheep across the fields: one or two quavering "baa"s (sometimes a lamb). */
+  private sheep(t: number) {
+    const ctx = this.ctx!;
+    const r = this.rnd;
+    const lamb = r() < 0.3;
+    const bleats = r() < 0.4 ? 2 : 1;
+    const v = new Voice();
+    const out = this.farOut(v, r() * 1.6 - 0.8, 0.13, 2400);
+    const f1 = v.add(this.filter('bandpass', 750, 3));
+    const f2 = v.add(this.filter('bandpass', 1900, 5));
+    const g2 = v.add(ctx.createGain());
+    g2.gain.value = 0.5;
+    f1.connect(out);
+    f2.connect(g2);
+    g2.connect(out);
+    for (let b = 0; b < bleats; b++) {
+      const st = t + b * (1.1 + r() * 0.5);
+      const dur = 0.7 + r() * 0.35;
+      const f = (lamb ? 420 : 270) + r() * 60;
+      const o = v.add(ctx.createOscillator());
+      o.type = 'sawtooth';
+      o.frequency.setValueAtTime(f, st);
+      o.frequency.linearRampToValueAtTime(f * 1.06, st + 0.15);
+      o.frequency.linearRampToValueAtTime(f * 0.9, st + dur);
+      const lfo = v.add(ctx.createOscillator());
+      lfo.frequency.value = 13 + r() * 5;
+      const vib = v.add(ctx.createGain());
+      vib.gain.value = f * 0.035;
+      lfo.connect(vib);
+      vib.connect(o.frequency);
+      const am = v.add(ctx.createGain());
+      am.gain.value = 0.75;
+      const trem = v.add(ctx.createGain());
+      trem.gain.value = 0.25;
+      lfo.connect(trem);
+      trem.connect(am.gain);
+      const g = v.add(ctx.createGain());
+      g.gain.setValueAtTime(MIN, st);
+      g.gain.linearRampToValueAtTime(1, st + 0.06);
+      g.gain.linearRampToValueAtTime(0.7, st + dur * 0.7);
+      g.gain.exponentialRampToValueAtTime(MIN, st + dur);
+      o.connect(am);
+      am.connect(g);
+      g.connect(f1);
+      g.connect(f2);
+      v.src(o, st, st + dur + 0.02);
+      v.src(lfo, st, st + dur + 0.02);
+    }
+    this.commit(v);
+  }
+
+  /** A cow in a far field: "mmm-OOOO", the mouth opening as the pitch rises and falls. */
+  private cow(t: number) {
+    const ctx = this.ctx!;
+    const r = this.rnd;
+    const v = new Voice();
+    const dur = 1.5 + r() * 0.7;
+    const f = 105 + r() * 30;
+    const out = this.farOut(v, r() * 1.6 - 0.8, 0.13, 1300);
+    const o = v.add(ctx.createOscillator());
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(f * 0.88, t);
+    o.frequency.linearRampToValueAtTime(f * 1.08, t + dur * 0.4);
+    o.frequency.linearRampToValueAtTime(f * 0.82, t + dur);
+    const bp = v.add(this.filter('bandpass', 260, 2.2));
+    bp.frequency.setValueAtTime(260, t);
+    bp.frequency.linearRampToValueAtTime(620, t + dur * 0.45);
+    bp.frequency.linearRampToValueAtTime(420, t + dur);
+    const g = v.add(ctx.createGain());
+    g.gain.setValueAtTime(MIN, t);
+    g.gain.linearRampToValueAtTime(0.6, t + 0.25);
+    g.gain.linearRampToValueAtTime(1, t + dur * 0.5);
+    g.gain.exponentialRampToValueAtTime(MIN, t + dur);
+    o.connect(bp);
+    bp.connect(g);
+    g.connect(out);
+    v.src(o, t, t + dur + 0.02);
+    this.commit(v);
+  }
+
+  /** Rooster at dawn, a farm or two away: cock-a-doodle-doooo. */
+  private rooster(t: number) {
+    const ctx = this.ctx!;
+    const r = this.rnd;
+    const v = new Voice();
+    const out = this.farOut(v, r() * 1.4 - 0.7, 0.085, 2600);
+    const k = 0.9 + r() * 0.2;
+    const f1 = v.add(this.filter('bandpass', 1400, 1.5));
+    const f2 = v.add(this.filter('bandpass', 2900, 3));
+    const g2 = v.add(ctx.createGain());
+    g2.gain.value = 0.4;
+    f1.connect(out);
+    f2.connect(g2);
+    g2.connect(out);
+    const segs: [len: number, from: number, to: number][] = [
+      [0.12, 600, 760],
+      [0.11, 780, 740],
+      [0.13, 800, 880],
+      [0.8, 940, 640],
+    ];
+    const o = v.add(ctx.createOscillator());
+    o.type = 'sawtooth';
+    const g = v.add(ctx.createGain());
+    g.gain.setValueAtTime(MIN, t);
+    let tt = t;
+    for (const [len, a, b] of segs) {
+      const long = len > 0.5;
+      o.frequency.setValueAtTime(a * k, tt);
+      o.frequency.exponentialRampToValueAtTime(b * k, tt + len * 0.9);
+      g.gain.setValueAtTime(MIN, tt);
+      g.gain.linearRampToValueAtTime(long ? 0.9 : 0.7, tt + 0.025);
+      if (long) g.gain.linearRampToValueAtTime(0.7, tt + len * 0.75);
+      g.gain.exponentialRampToValueAtTime(MIN, tt + len);
+      tt += len + 0.035;
+    }
+    o.connect(g);
+    g.connect(f1);
+    g.connect(f2);
+    v.src(o, t, tt + 0.02);
+    this.commit(v);
+  }
+
+  /** A tractor working a far field: low diesel putt-putt drifting in and out. */
+  private tractor(t: number) {
+    const ctx = this.ctx!;
+    const r = this.rnd;
+    const dur = 10 + r() * 5;
+    const v = new Voice();
+    const out = this.farOut(v, r() * 1.2 - 0.6, 1, 340);
+    const g = v.add(ctx.createGain());
+    g.gain.setValueAtTime(MIN, t);
+    g.gain.exponentialRampToValueAtTime(0.07, t + dur * 0.35);
+    g.gain.setValueAtTime(0.07, t + dur * 0.6);
+    g.gain.exponentialRampToValueAtTime(MIN, t + dur);
+    g.connect(out);
+    const f = 36 + r() * 10;
+    const o = v.add(ctx.createOscillator());
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(f, t);
+    o.frequency.linearRampToValueAtTime(f * (0.9 + r() * 0.2), t + dur);
+    const am = v.add(ctx.createGain());
+    am.gain.value = 0.6;
+    const lfo = v.add(ctx.createOscillator());
+    lfo.type = 'square';
+    lfo.frequency.value = f / 4;
+    const depth = v.add(ctx.createGain());
+    depth.gain.value = 0.4;
+    lfo.connect(depth);
+    depth.connect(am.gain);
+    o.connect(am);
+    am.connect(g);
+    v.src(o, t, t + dur + 0.02);
+    v.src(lfo, t, t + dur + 0.02);
+    this.commit(v);
+  }
+
+  /** Forest songbird: a song thrush's repeated motifs or a warbler's tumbling run. */
+  private songbird(t: number) {
+    const ctx = this.ctx!;
+    const r = this.rnd;
+    const v = new Voice();
+    const out = this.farOut(v, r() * 1.6 - 0.8, 0.1);
+    const note = (st: number, len: number, f0: number, f1: number, pk: number) => {
+      const o = v.add(ctx.createOscillator());
+      o.type = 'sine';
+      o.frequency.setValueAtTime(f0, st);
+      o.frequency.exponentialRampToValueAtTime(f1, st + len);
+      const g = v.add(ctx.createGain());
+      this.env(g.gain, st, Math.min(0.012, len * 0.3), pk, len);
+      o.connect(g);
+      g.connect(out);
+      v.src(o, st, st + len + 0.03);
+    };
+    let tt = t;
+    if (r() < 0.55) {
+      const motifs = 2 + Math.floor(r() * 2);
+      for (let m = 0; m < motifs; m++) {
+        const notes = 2 + Math.floor(r() * 3);
+        const motif = Array.from({ length: notes }, () => {
+          const f = 1800 + r() * 2400;
+          return { len: 0.05 + r() * 0.09, f0: f, f1: f * (0.75 + r() * 0.6) };
+        });
+        const reps = 2 + (r() < 0.4 ? 1 : 0);
+        for (let k = 0; k < reps; k++) {
+          for (const n of motif) {
+            note(tt, n.len, n.f0, n.f1, 0.6 + r() * 0.4);
+            tt += n.len + 0.035;
+          }
+          tt += 0.09 + r() * 0.05;
+        }
+        tt += 0.35 + r() * 0.5;
+      }
+    } else {
+      const n = 9 + Math.floor(r() * 8);
+      let f = 4200 + r() * 1200;
+      for (let i = 0; i < n; i++) {
+        const len = 0.03 + r() * 0.03;
+        note(tt, len, f * 1.08, f * 0.9, 0.5 + r() * 0.5);
+        tt += len + 0.018;
+        f *= 0.96 + r() * 0.05;
+      }
+    }
+    this.commit(v);
+  }
+
+  /** Woodpecker drumming on a trunk somewhere in the trees. */
+  private woodpecker(t: number) {
+    const ctx = this.ctx!;
+    const r = this.rnd;
+    const taps: [time: number, amp: number][] = [];
+    let tt = t;
+    const drums = r() < 0.5 ? 2 : 1;
+    for (let d = 0; d < drums; d++) {
+      const n = 14 + Math.floor(r() * 8);
+      let gap = 0.045;
+      for (let i = 0; i < n; i++) {
+        taps.push([tt, 1 - (i / n) * 0.6]);
+        tt += gap;
+        gap *= 1.025;
+      }
+      tt += 1.4 + r() * 0.6;
+    }
+    const end = taps[taps.length - 1][0] + 0.05;
+    const v = new Voice();
+    const out = this.farOut(v, r() * 1.6 - 0.8, 0.32, 3000);
+    const n = this.noiseSrc(v, t, end - t);
+    const bp = v.add(this.filter('bandpass', 900 + r() * 500, 4));
+    const g = v.add(ctx.createGain());
+    g.gain.setValueAtTime(0, t);
+    for (const [x, a] of taps) {
+      g.gain.setValueAtTime(0, x);
+      g.gain.linearRampToValueAtTime(a, x + 0.002);
+      g.gain.linearRampToValueAtTime(0, x + 0.022);
+    }
+    n.connect(bp);
+    bp.connect(g);
+    g.connect(out);
+    this.commit(v);
+  }
+
+  // ─────────── sound design: world events ───────────
+
+  /** A little bird landing on the sill: close, cute "chee-ip"s. */
+  private chirp(t: number) {
+    const ctx = this.ctx!;
+    const r = this.rnd;
+    const v = new Voice();
+    const out = this.farOut(v, 0.35 + r() * 0.3, 0.09);
+    const n = 2 + Math.floor(r() * 3);
+    const base = 3400 + r() * 700;
+    let tt = t;
+    for (let i = 0; i < n; i++) {
+      const len = 0.05 + r() * 0.03;
+      const o = v.add(ctx.createOscillator());
+      o.type = 'sine';
+      o.frequency.setValueAtTime(base * 0.85, tt);
+      o.frequency.exponentialRampToValueAtTime(base * 1.2, tt + len * 0.45);
+      o.frequency.exponentialRampToValueAtTime(base * 0.95, tt + len);
+      const g = v.add(ctx.createGain());
+      this.env(g.gain, tt, 0.006, i === n - 1 ? 0.8 : 1, len);
+      o.connect(g);
+      g.connect(out);
+      v.src(o, tt, tt + len + 0.03);
+      tt += len + (i % 2 ? 0.16 + r() * 0.1 : 0.05 + r() * 0.03);
+    }
+    this.commit(v);
+  }
+
+  /** UFO zipping across the sky: a playful wobbling "wooo-eee-oo" with an air rush. */
+  private whoosh(t: number, dir: 1 | -1) {
+    const ctx = this.ctx!;
+    const r = this.rnd;
+    const dur = 0.9 + r() * 0.3;
+    const v = new Voice();
+    const p = this.panner(v, -0.8 * dir);
+    if (p.pan) {
+      p.pan.setValueAtTime(-0.8 * dir, t);
+      p.pan.linearRampToValueAtTime(0.8 * dir, t + dur);
+    }
+    p.connect(this.outdoor);
+    const out = v.add(ctx.createGain());
+    out.gain.setValueAtTime(MIN, t);
+    out.gain.exponentialRampToValueAtTime(0.09, t + dur * 0.4);
+    out.gain.exponentialRampToValueAtTime(MIN, t + dur);
+    out.connect(p);
+    const o = v.add(ctx.createOscillator());
+    o.type = 'sine';
+    o.frequency.setValueAtTime(320, t);
+    o.frequency.exponentialRampToValueAtTime(1500 + r() * 400, t + dur * 0.45);
+    o.frequency.exponentialRampToValueAtTime(520, t + dur);
+    const lfo = v.add(ctx.createOscillator());
+    lfo.frequency.value = 11 + r() * 4;
+    const wob = v.add(ctx.createGain());
+    wob.gain.value = 45;
+    lfo.connect(wob);
+    wob.connect(o.frequency);
+    const og = v.add(ctx.createGain());
+    og.gain.value = 0.55;
+    o.connect(og);
+    og.connect(out);
+    const n = this.noiseSrc(v, t, dur + 0.02);
+    const bp = v.add(this.filter('bandpass', 900, 1.2));
+    bp.frequency.setValueAtTime(700, t);
+    bp.frequency.exponentialRampToValueAtTime(3200, t + dur * 0.45);
+    bp.frequency.exponentialRampToValueAtTime(1100, t + dur);
+    n.connect(bp);
+    bp.connect(out);
+    v.src(o, t, t + dur + 0.02);
+    v.src(lfo, t, t + dur + 0.02);
+    this.commit(v);
+  }
+
+  /** Hot-air balloon burner firing, high and far: a flickering roar. */
+  private balloon(t: number) {
+    const ctx = this.ctx!;
+    const r = this.rnd;
+    const dur = 1.4 + r() * 0.9;
+    const v = new Voice();
+    const out = this.farOut(v, r() * 1.2 - 0.6, 0.12, 2200);
+    const g = v.add(ctx.createGain());
+    g.gain.setValueAtTime(MIN, t);
+    g.gain.linearRampToValueAtTime(1, t + 0.12);
+    g.gain.setValueAtTime(1, t + dur - 0.3);
+    g.gain.exponentialRampToValueAtTime(MIN, t + dur);
+    g.connect(out);
+    const am = v.add(ctx.createGain());
+    am.gain.value = 0.75;
+    const lfo = v.add(ctx.createOscillator());
+    lfo.frequency.value = 11 + r() * 5;
+    const fl = v.add(ctx.createGain());
+    fl.gain.value = 0.22;
+    lfo.connect(fl);
+    fl.connect(am.gain);
+    am.connect(g);
+    const n = this.noiseSrc(v, t, dur + 0.02);
+    const bp = v.add(this.filter('bandpass', 950, 0.6));
+    n.connect(bp);
+    bp.connect(am);
+    const n2 = this.noiseSrc(v, t, dur + 0.02, this.brown);
+    const lp = v.add(this.filter('lowpass', 300, 0.6));
+    n2.connect(lp);
+    lp.connect(am);
+    v.src(lfo, t, t + dur + 0.02);
+    this.commit(v);
+  }
+
+  /** Fireworks over the far rooftops: soft booms, pops and glittery crackle. */
+  private fireworks(t: number) {
+    const ctx = this.ctx!;
+    const r = this.rnd;
+    const bursts = 3 + Math.floor(r() * 4);
+    let bt = t;
+    for (let b = 0; b < bursts; b++) {
+      const v = new Voice();
+      const out = this.farOut(v, r() * 1.6 - 0.8, 0.13 * (0.6 + r() * 0.4), 3500);
+      const n = this.noiseSrc(v, bt, 0.7, this.brown);
+      const lp = v.add(this.filter('lowpass', 170, 0.8));
+      const g = v.add(ctx.createGain());
+      this.env(g.gain, bt, 0.004, 1.6, 0.6);
+      n.connect(lp);
+      lp.connect(g);
+      g.connect(out);
+      const n2 = this.noiseSrc(v, bt, 0.05);
+      const bp = v.add(this.filter('bandpass', 1400, 1));
+      const g2 = v.add(ctx.createGain());
+      this.env(g2.gain, bt, 0.001, 0.5, 0.04);
+      n2.connect(bp);
+      bp.connect(g2);
+      g2.connect(out);
+      const ct = bt + 0.18 + r() * 0.1;
+      const cd = 0.9 + r() * 0.6;
+      const c = this.noiseSrc(v, ct, cd, this.crackleBuf, 3 + r() * 1.5);
+      const hp = v.add(this.filter('highpass', 2200, 0.7));
+      const g3 = v.add(ctx.createGain());
+      g3.gain.setValueAtTime(MIN, ct);
+      g3.gain.linearRampToValueAtTime(2.2, ct + 0.05);
+      g3.gain.exponentialRampToValueAtTime(MIN, ct + cd);
+      c.connect(hp);
+      hp.connect(g3);
+      g3.connect(out);
+      this.commit(v);
+      bt += 0.35 + r() * 0.9;
+    }
+  }
+
+  // ─────────── sound design: interactions ───────────
+
+  /** Caught a shooting star: a twinkly upward pentatonic run over an airy shimmer. */
+  private sparkle(t: number) {
+    const ctx = this.ctx!;
+    const r = this.rnd;
+    const v = new Voice();
+    const out = v.add(ctx.createGain());
+    out.connect(this.sfxBus);
+    const pL = this.panner(v, -0.5);
+    const pR = this.panner(v, 0.5);
+    pL.connect(out);
+    pR.connect(out);
+    const scale = [1568, 1760, 2093, 2349, 2637, 3136, 3520, 4186, 4699];
+    const n = 7 + Math.floor(r() * 3);
+    for (let i = 0; i < n; i++) {
+      const st = t + i * 0.045 + r() * 0.01;
+      const o = v.add(ctx.createOscillator());
+      o.type = 'sine';
+      o.frequency.value = scale[Math.min(scale.length - 1, i)];
+      const g = v.add(ctx.createGain());
+      this.env(g.gain, st, 0.003, 0.05 * (1 - i / (n * 1.6)), 0.5 + r() * 0.3);
+      o.connect(g);
+      g.connect(i % 2 ? pR : pL);
+      v.src(o, st, st + 0.85);
+    }
+    const nz = this.noiseSrc(v, t, 1.0);
+    const hp = v.add(this.filter('highpass', 6500, 0.7));
+    const g = v.add(ctx.createGain());
+    g.gain.setValueAtTime(MIN, t);
+    g.gain.linearRampToValueAtTime(0.03, t + 0.3);
+    g.gain.exponentialRampToValueAtTime(MIN, t + 1.0);
+    nz.connect(hp);
+    hp.connect(g);
+    g.connect(out);
+    this.commit(v);
+  }
+
+  /** Tapping the character: a tiny tap and a closed-mouth questioning "hm?". */
+  private boop(t: number) {
+    const ctx = this.ctx!;
+    const sfx = this.sfxBus;
+    const v = new Voice();
+    const f = 340 + this.rnd() * 30;
+    const o = v.add(ctx.createOscillator());
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(f, t);
+    o.frequency.exponentialRampToValueAtTime(f * 0.92, t + 0.08);
+    o.frequency.exponentialRampToValueAtTime(f * 1.5, t + 0.26);
+    const lp = v.add(this.filter('lowpass', 1400, 0.7));
+    const g = v.add(ctx.createGain());
+    g.gain.setValueAtTime(MIN, t);
+    g.gain.linearRampToValueAtTime(0.09, t + 0.03);
+    g.gain.linearRampToValueAtTime(0.07, t + 0.18);
+    g.gain.exponentialRampToValueAtTime(MIN, t + 0.32);
+    o.connect(lp);
+    lp.connect(g);
+    g.connect(sfx);
+    v.src(o, t, t + 0.34);
+    this.commit(v);
+    this.noiseHit(t, 0.01, 'bandpass', 2600, 2, 0.05, sfx);
+  }
+
+  /** Friendly greeting: two rising vowel-coloured notes, "he-ey!". */
+  private hey(t: number) {
+    const ctx = this.ctx!;
+    const v = new Voice();
+    const out = v.add(ctx.createGain());
+    out.connect(this.sfxBus);
+    const f1 = v.add(this.filter('bandpass', 620, 3));
+    const f2 = v.add(this.filter('bandpass', 1900, 4));
+    const g2 = v.add(ctx.createGain());
+    g2.gain.value = 0.6;
+    f1.connect(out);
+    f2.connect(g2);
+    g2.connect(out);
+    const notes: [dt: number, f: number, len: number][] = [
+      [0, 523.25, 0.12],
+      [0.13, 783.99, 0.26],
+    ];
+    for (const [dt, f, len] of notes) {
+      const st = t + dt;
+      const o = v.add(ctx.createOscillator());
+      o.type = 'sawtooth';
+      o.frequency.setValueAtTime(f * 0.94, st);
+      o.frequency.exponentialRampToValueAtTime(f, st + 0.04);
+      const g = v.add(ctx.createGain());
+      this.env(g.gain, st, 0.012, 0.28, len);
+      o.connect(g);
+      g.connect(f1);
+      g.connect(f2);
+      const s = v.add(ctx.createOscillator());
+      s.type = 'sine';
+      s.frequency.value = f;
+      const gs = v.add(ctx.createGain());
+      this.env(gs.gain, st, 0.012, 0.07, len);
+      s.connect(gs);
+      gs.connect(out);
+      v.src(o, st, st + len + 0.03);
+      v.src(s, st, st + len + 0.03);
+    }
+    this.commit(v);
+  }
+
+  /** A tiny sip from the mug: a short slurp and a soft gulp. */
+  private sip(t: number) {
+    const ctx = this.ctx!;
+    const sfx = this.sfxBus;
+    const v = new Voice();
+    const dur = 0.26;
+    const n = this.noiseSrc(v, t, dur + 0.02);
+    const bp = v.add(this.filter('bandpass', 700, 3));
+    bp.frequency.setValueAtTime(700, t);
+    bp.frequency.exponentialRampToValueAtTime(2600, t + dur);
+    const g = v.add(ctx.createGain());
+    g.gain.setValueAtTime(MIN, t);
+    g.gain.linearRampToValueAtTime(0.2, t + 0.05);
+    g.gain.linearRampToValueAtTime(0.08, t + 0.1);
+    g.gain.linearRampToValueAtTime(0.24, t + 0.17);
+    g.gain.exponentialRampToValueAtTime(MIN, t + dur);
+    n.connect(bp);
+    bp.connect(g);
+    g.connect(sfx);
+    this.commit(v);
+    this.blip(t + 0.34, 210, 0.07, 0.1, 'sine', sfx, 140);
+  }
+
+  /** One clock tick (clicking the clock). */
+  private clockTick(t: number) {
+    this.noiseHit(t, 0.025, 'bandpass', 3200, 6, 0.4, this.sfxBus);
+    this.blip(t, 2400, 0.015, 0.03, 'sine', this.sfxBus);
+  }
+
+  /** Opening a letter: the flap peeling ("fwip") then the paper sliding out. */
+  private paper(t: number) {
+    const ctx = this.ctx!;
+    const v = new Voice();
+    const n = this.noiseSrc(v, t, 0.14);
+    const bp = v.add(this.filter('bandpass', 1800, 1.5));
+    bp.frequency.setValueAtTime(1800, t);
+    bp.frequency.exponentialRampToValueAtTime(4800, t + 0.12);
+    const g = v.add(ctx.createGain());
+    g.gain.setValueAtTime(MIN, t);
+    g.gain.linearRampToValueAtTime(0.12, t + 0.04);
+    g.gain.exponentialRampToValueAtTime(MIN, t + 0.13);
+    n.connect(bp);
+    bp.connect(g);
+    g.connect(this.sfxBus);
+    this.commit(v);
+    this.page(t + 0.14, this.sfxBus, 0.9);
+  }
+
+  /** Quest complete: "ta-ta-DAA!" pickup and a bright brassy chord with a glint on top. */
+  private quest(t: number) {
+    const ctx = this.ctx!;
+    const sfx = this.sfxBus;
+    this.blip(t, 783.99, 0.08, 0.13, 'triangle', sfx);
+    this.blip(t + 0.1, 783.99, 0.08, 0.13, 'triangle', sfx);
+    const st = t + 0.2;
+    const v = new Voice();
+    const lp = v.add(this.filter('lowpass', 1200, 0.8));
+    lp.frequency.setValueAtTime(1200, st);
+    lp.frequency.exponentialRampToValueAtTime(3200, st + 0.05);
+    lp.frequency.exponentialRampToValueAtTime(1400, st + 0.6);
+    const g = v.add(ctx.createGain());
+    g.gain.setValueAtTime(MIN, st);
+    g.gain.linearRampToValueAtTime(0.05, st + 0.02);
+    g.gain.setValueAtTime(0.05, st + 0.25);
+    g.gain.exponentialRampToValueAtTime(MIN, st + 0.75);
+    lp.connect(g);
+    g.connect(sfx);
+    for (const f of [523.25, 659.25, 783.99, 1046.5]) {
+      const o = v.add(ctx.createOscillator());
+      o.type = 'sawtooth';
+      o.frequency.value = f;
+      o.detune.value = (this.rnd() - 0.5) * 10;
+      o.connect(lp);
+      v.src(o, st, st + 0.78);
+    }
+    this.commit(v);
+    this.blip(st, 1046.5, 0.6, 0.12, 'triangle', sfx);
+    [2093, 2637, 3136].forEach((f, i) => this.blip(st + 0.12 + i * 0.06, f, 0.25, 0.03, 'sine', sfx));
+  }
+
+  /** Big milestone: a warm pad swelling open, crowned by a cascade of chimes. */
+  private levelUp(t: number) {
+    const ctx = this.ctx!;
+    const sfx = this.sfxBus;
+    const v = new Voice();
+    const lp = v.add(this.filter('lowpass', 300, 0.7));
+    lp.frequency.setValueAtTime(300, t);
+    lp.frequency.exponentialRampToValueAtTime(2400, t + 0.9);
+    lp.frequency.exponentialRampToValueAtTime(1100, t + 2.6);
+    const g = v.add(ctx.createGain());
+    g.gain.setValueAtTime(MIN, t);
+    g.gain.linearRampToValueAtTime(0.022, t + 0.9);
+    g.gain.setValueAtTime(0.022, t + 1.5);
+    g.gain.exponentialRampToValueAtTime(MIN, t + 3.4);
+    lp.connect(g);
+    g.connect(sfx);
+    const end = t + 3.45;
+    for (const f of [261.63, 329.63, 392, 493.88, 587.33]) {
+      for (const det of [-7, 7]) {
+        const o = v.add(ctx.createOscillator());
+        o.type = 'sawtooth';
+        o.frequency.value = f;
+        o.detune.value = det;
+        o.connect(lp);
+        v.src(o, t, end);
+      }
+    }
+    const sub = v.add(ctx.createOscillator());
+    sub.type = 'sine';
+    sub.frequency.value = 130.81;
+    const sg = v.add(ctx.createGain());
+    sg.gain.value = 2;
+    sub.connect(sg);
+    sg.connect(lp);
+    v.src(sub, t, end);
+    this.commit(v);
+    this.bell(t + 0.85, 1046.5, 0.08, 2.2, sfx);
+    this.bell(t + 0.97, 1318.5, 0.065, 2.2, sfx);
+    this.bell(t + 1.09, 1568, 0.055, 2.4, sfx);
+    this.bell(t + 1.24, 2093, 0.045, 2.6, sfx);
+  }
 }
 
+/** Loop output gain at level 1. */
 const LOOP_BASE: Record<LoopKey, number> = {
   crackle: 0.9,
-  rain: 0.17,
+  rain: 0.085,
   wind: 0.3,
   crickets: 0.012,
   bubbles: 0.06,
+  room: 0.022,
+  waves: 0.1,
+  hum: 0.11,
+  breeze: 0.12,
+  pines: 0.16,
+  stream: 0.045,
+  frogs: 0.012,
 };
+
+/** Level of an ambient (scheduler-picked) passing car vs. one the renderer asks for. */
+const CAR_AMBIENT = 0.16;
+const CAR_EVENT = 0.26;

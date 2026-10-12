@@ -6,7 +6,8 @@ import { RoomRenderer } from './render/room';
 import { simTime } from './core/sim';
 import { HOUR } from './core/time';
 import type { Weather } from './core/weather';
-import type { Mode } from './render/scene';
+import type { Mode, WorldEventKind } from './render/scene';
+import type { Outside } from './render/outside';
 import { ITEMS } from './core/catalog';
 import { CHARACTER_PRESETS, ROOM_PRESETS, normalizeProfile } from './core/profile';
 
@@ -52,3 +53,10 @@ requestAnimationFrame(frame);
 (window as unknown as { labReady: boolean; lab: unknown }).labReady = true;
 // for scripted interaction tests: lab.r.hitTest(x,y) / lab.r.interact(target, time)
 (window as unknown as { lab: unknown }).lab = { r };
+// world events for screenshots: &ev=balloon,ufo&evAge=3 (seconds into the event); lab.outside.forceEvent(kind, age)
+const outside = (r as unknown as { outside: Outside }).outside;
+(window as unknown as { lab: { outside: Outside } }).lab.outside = outside;
+if (q.get('ev'))
+  setTimeout(() => {
+    for (const k of q.get('ev')!.split(',')) outside.forceEvent(k as WorldEventKind, Number(q.get('evAge') ?? 2));
+  }, 150);

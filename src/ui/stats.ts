@@ -3,7 +3,7 @@ import * as actions from '../core/actions';
 import type { Session } from '../core/types';
 import { dailyTotals, lifetimeCoins, streakInfo, totalStudiedMs } from '../core/economy';
 import { simTime } from '../core/sim';
-import { HOUR, MIN, formatHours } from '../core/time';
+import { DAY_MS, HOUR, MIN, formatHours } from '../core/time';
 import { h, mount } from './dom';
 import {
   formatClockTime,
@@ -17,6 +17,7 @@ import {
 } from './format';
 import { confirmDialog, openModal, toast } from './overlay';
 import { heatmap, lastNDays, validateManual } from './viewmodel';
+import { subjectColor, subjectTotals } from './goalsvm';
 import type { Ctx } from './context';
 
 const PAGE = 25;
@@ -24,6 +25,7 @@ const PAGE = 25;
 export function createStatsView(ctx: Ctx) {
   const el = h('section', { class: 'view view-stats', 'aria-label': 'Stats' });
   let shown = PAGE;
+  let subjectRange: '30d' | 'all' = '30d';
 
   const tile = (v: string, k: string) => h('div', { class: 'tile' }, h('div', { class: 'tile-v' }, v), h('div', { class: 'tile-k' }, k));
 
@@ -55,6 +57,53 @@ export function createStatsView(ctx: Ctx) {
         ),
         h('div', { class: 'bar-labels', 'aria-hidden': 'true' }, days.map((d) => h('span', { class: d.isToday ? 'today' : '' }, d.isToday ? 'Today' : d.label))),
       ),
+    );
+  }
+
+  function bySubject(all: Session[], now: number) {
+    const since = subjectRange === '30d' ? now - 30 * DAY_MS : null;
+    const { subjects, untaggedMs } = subjectTotals(all, since);
+    const max = Math.max(1, ...subjects.map((x) => x.ms));
+    const seg = h(
+      'div',
+      { class: 'segmented mini-seg', role: 'radiogroup', 'aria-label': 'Subject time range' },
+      (['30d', 'all'] as const).map((r) =>
+        h(
+          'button',
+          {
+            type: 'button',
+            class: 'seg',
+            role: 'radio',
+            'aria-checked': String(subjectRange === r),
+            onclick: () => {
+              subjectRange = r;
+              render();
+            },
+          },
+          r === '30d' ? '30 days' : 'All time',
+        ),
+      ),
+    );
+    return h(
+      'figure',
+      { class: 'card chart subjects-chart' },
+      h('figcaption', null, h('h3', null, 'By subject'), seg),
+      subjects.length
+        ? h(
+            'ul',
+            { class: 'sbars' },
+            subjects.slice(0, 8).map((x) =>
+              h(
+                'li',
+                { class: 'sbar-row', title: `${x.name}: ${formatShort(x.ms)} · ${x.sessions} session${x.sessions === 1 ? '' : 's'}` },
+                h('span', { class: 'sbar-name ellipsis' }, x.name),
+                h('span', { class: 'sbar-track' }, h('span', { class: 'sbar-fill', style: `width:${Math.max(2, (x.ms / max) * 100).toFixed(1)}%;--c:${x.color}` })),
+                h('span', { class: 'sbar-v' }, formatShort(x.ms)),
+              ),
+            ),
+          )
+        : h('p', { class: 'muted small empty' }, all.length ? 'Tag your next session with a subject when it ends to see where your time goes.' : 'Finish a session and tag what you studied to see it here.'),
+      subjects.length && untaggedMs >= MIN ? h('p', { class: 'muted small sbar-foot' }, `+ ${formatShort(untaggedMs)} untagged`) : null,
     );
   }
 
@@ -113,7 +162,9 @@ export function createStatsView(ctx: Ctx) {
           s.multiplier > 1 ? h('span', { class: 'muted' }, ` ${formatMult(s.multiplier)}`) : null,
           s.pomodoros ? h('span', null, ` · 🍅 ${s.pomodoros}`) : null,
           s.manual ? h('span', { class: 'tag' }, 'manual') : null,
+          s.subject ? h('span', { class: 'subject-tag', style: `--c:${subjectColor(s.subject)}` }, s.subject) : null,
         ),
+        s.note ? h('div', { class: 'hist-note' }, `“${s.note}”`) : null,
       ),
       h(
         'button',
@@ -220,6 +271,7 @@ export function createStatsView(ctx: Ctx) {
         ),
       ),
       weekChart(daily, now, state.settings.dailyGoalMin),
+      bySubject(state.sessions, now),
       heat(daily, now),
       h(
         'div',

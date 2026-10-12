@@ -150,3 +150,17 @@ export function hue(h: number, l = 0.6): string {
 }
 
 export const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
+
+/** Mixes two '#rrggbb' colours → '#rrggbb' (for deriving palettes; not for per-frame use). */
+export function mixHex(a: string, b: string, t: number): string {
+  const m = mix(hex(a), hex(b), t);
+  return '#' + m.map((v) => v.toString(16).padStart(2, '0')).join('');
+}
+
+/** Small deterministic hash → 0..1 (for stable per-pixel / per-tile variation without allocation). */
+export function hash01(x: number, y: number, seed = 0): number {
+  let h = (x * 374761393 + y * 668265263 + seed * 2147483647) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}

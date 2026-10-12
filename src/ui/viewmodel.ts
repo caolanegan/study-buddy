@@ -10,6 +10,7 @@ import { activeMs, isOnBreak, isRunning, LONG_BREAK_EVERY } from '../core/sessio
 import { MIN, addDays, dayKey, formatDuration } from '../core/time';
 import type { Mode } from '../render/scene';
 import { formatCoins, formatCountdown, formatMult, formatShort } from './format';
+import { returnsLabel } from './goalsvm';
 
 /** Streak multiplier that would apply if the running session ended now. */
 export function liveMultiplier(state: AppState, now: number): number {
@@ -148,13 +149,13 @@ export interface ShopButton {
   hint: string;
 }
 
-export function shopButton(state: AppState, item: Item, mult: number): ShopButton {
+export function shopButton(state: AppState, item: Item, mult: number, now = Date.now()): ShopButton {
   if (owns(state, item.id)) {
     return isEquipped(state, item.id)
       ? { label: 'Unequip', action: 'unequip', disabled: false, hint: 'Equipped' }
       : { label: 'Equip', action: 'equip', disabled: false, hint: 'Owned' };
   }
-  const err = canBuy(state, item.id);
+  const err = canBuy(state, item.id, now);
   switch (err) {
     case null:
       return { label: `Buy · 🪙 ${formatCoins(item.price)}`, action: 'buy', disabled: false, hint: '' };
@@ -173,6 +174,8 @@ export function shopButton(state: AppState, item: Item, mult: number): ShopButto
         hint: `Need ${formatCoins(need)} more · ~${formatShort(minutesToAfford(need, mult) * MIN)} of study`,
       };
     }
+    case 'expired':
+      return { label: returnsLabel(item, now) ?? 'Unavailable', action: 'none', disabled: true, hint: item.limited ? `Limited — ${item.limited.event} only` : '' };
     default:
       return { label: 'Unavailable', action: 'none', disabled: true, hint: '' };
   }

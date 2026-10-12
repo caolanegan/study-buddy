@@ -8,6 +8,8 @@ import { deriveSession, goalProgress, todayMs, type SessionStatus } from './view
 import type { Ctx } from './context';
 import type { SessionController } from './session';
 import { MIN } from '../core/time';
+import { dailyQuests } from '../core/quests';
+import { nextQuestLine } from './goalsvm';
 
 export interface RoomView {
   stage: HTMLElement;
@@ -72,7 +74,12 @@ export function createRoomView(ctx: Ctx, sc: SessionController): RoomView {
     h('div', null, goalToday, goalOf),
   );
 
-  const panel = h('section', { class: 'panel session', 'aria-label': 'Study session' }, timer, sub, coinLine, modeToggle, btns, goal);
+  // nudge towards the closest daily quest (tap → Goals)
+  const nextQuest = h('button', { type: 'button', class: 'next-quest', hidden: true, onclick: () => ctx.showTab('goals') });
+  let questAt = 0;
+  let questFor: AppState | null = null;
+
+  const panel = h('section', { class: 'panel session', 'aria-label': 'Study session' }, timer, sub, coinLine, modeToggle, btns, goal, nextQuest);
 
   let last = '';
   let lastStatus: SessionStatus | null = null;
@@ -118,6 +125,17 @@ export function createRoomView(ctx: Ctx, sc: SessionController): RoomView {
       goal.setAttribute('aria-valuenow', String(Math.floor(p * 100)));
       setText(goalToday, `Today: ${formatShort(today)}`);
       goal.title = p >= 1 ? 'Daily goal reached' : `Daily goal: ${formatShort(state.settings.dailyGoalMin * MIN)}`;
+      if (state !== questFor || now - questAt > 5000) {
+        questFor = state;
+        questAt = now;
+        const nq = nextQuestLine(dailyQuests(state, now));
+        nextQuest.hidden = !nq;
+        if (nq) {
+          setText(nextQuest, nq.text);
+          nextQuest.classList.toggle('ready', nq.ready);
+          nextQuest.title = 'Open Goals';
+        }
+      }
       setText(goalOf, p >= 1 ? `Goal of ${formatShort(state.settings.dailyGoalMin * MIN)} reached 🎉` : `of ${formatShort(state.settings.dailyGoalMin * MIN)} daily goal`);
     },
   };

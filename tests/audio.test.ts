@@ -1,14 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   AMBIENCE_WEIGHTS,
+  AUDIO_VIEWS,
   AudioEngine,
+  DAWN,
+  LOOP_IDS,
   SFX_NAMES,
   eligibleAmbience,
   loopLevels,
+  musicFlavor,
   musicMode,
   nextAmbienceDelay,
   pickAmbience,
+  sfxChannel,
+  type AmbienceId,
   type AudioScene,
+  type Sfx,
 } from '../src/audio/engine';
 
 // ───────── minimal fake Web Audio graph ─────────
@@ -360,5 +367,242 @@ describe('pure ambience logic', () => {
     expect(pickAmbience(['owl'], () => 0.5, 'owl')).toBe('owl');
     expect(pickAmbience(['owl', 'car'], () => 0, 'owl')).toBe('car');
     expect(pickAmbience(['owl', 'car'], () => 0.999)).toBe('car');
+  });
+});
+
+// ───────── per-view ambience, new sounds, gating ─────────
+
+const WEATHERS = ['clear', 'cloudy', 'rain', 'storm', 'snow', 'fog'] as const;
+const OUTDOOR_BY_VIEW: Record<string, AmbienceId[]> = {
+  street: ['birds', 'owl', 'distant-dog', 'car'],
+  seaside: ['gull', 'rigging', 'foghorn'],
+  city: ['pigeon', 'train', 'siren'],
+  countryside: ['birds', 'rooster', 'sheep', 'cow', 'tractor', 'distant-dog', 'owl'],
+  forest: ['songbird', 'woodpecker', 'owl'],
+};
+const NEW_WORLD: Sfx[] = ['balloon', 'fireworks', 'train', 'gull', 'owl', 'chirp', 'whoosh', 'horn'];
+const NEW_UI: Sfx[] = ['sparkle', 'purr', 'boop', 'hey', 'sip', 'rustle', 'tick', 'pop', 'paper', 'quest', 'level'];
+
+describe('per-view ambience (pure)', () => {
+  it("defaults to the street view and keeps the street's sounds there", () => {
+    expect(eligibleAmbience(scene())).toEqual(eligibleAmbience(scene({ view: 'street' })));
+    expect(eligibleAmbience(scene())).toEqual(expect.arrayContaining(['birds', 'distant-dog', 'car']));
+    expect(loopLevels(scene())).toEqual(loopLevels(scene({ view: 'street' })));
+  });
+
+  it('only offers outdoor sounds that belong to the current view', () => {
+    const all = new Set(Object.values(OUTDOOR_BY_VIEW).flat());
+    for (const view of AUDIO_VIEWS) {
+      for (const weather of WEATHERS) {
+        for (const isNight of [false, true]) {
+          for (const season of [0, 1, 2, 3] as const) {
+            const el = eligibleAmbience(scene({ view, weather, isNight, season, timeOfDay: 0.01 }));
+            for (const a of el) {
+              expect(AMBIENCE_WEIGHTS[a]).toBeGreaterThan(0);
+              if (all.has(a)) expect(OUTDOOR_BY_VIEW[view], `${view}: ${a}`).toContain(a);
+            }
+          }
+        }
+      }
+    }
+    expect(eligibleAmbience(scene({ view: 'city' }))).not.toContain('car');
+    expect(eligibleAmbience(scene({ view: 'forest' }))).not.toContain('car');
+    expect(eligibleAmbience(scene({ view: 'seaside' }))).not.toContain('birds');
+  });
+
+  it('seaside: gulls by dry day, rigging always, foghorn in fog/night', () => {
+    expect(eligibleAmbience(scene({ view: 'seaside' }))).toEqual(expect.arrayContaining(['gull', 'rigging']));
+    expect(eligibleAmbience(scene({ view: 'seaside', weather: 'rain' }))).not.toContain('gull');
+    expect(eligibleAmbience(scene({ view: 'seaside', isNight: true }))).not.toContain('gull');
+    expect(eligibleAmbience(scene({ view: 'seaside', weather: 'fog' }))).toContain('foghorn');
+    expect(eligibleAmbience(scene({ view: 'seaside', isNight: true }))).toContain('foghorn');
+    expect(eligibleAmbience(scene({ view: 'seaside', weather: 'clear' }))).not.toContain('foghorn');
+  });
+
+  it('city: pigeons by day, trains, a (very rare) siren', () => {
+    const day = eligibleAmbience(scene({ view: 'city' }));
+    expect(day).toEqual(expect.arrayContaining(['pigeon', 'train', 'siren']));
+    expect(eligibleAmbience(scene({ view: 'city', isNight: true }))).not.toContain('pigeon');
+    expect(AMBIENCE_WEIGHTS.siren).toBeLessThan(AMBIENCE_WEIGHTS.train);
+    expect(AMBIENCE_WEIGHTS.siren).toBeLessThan(0.5);
+  });
+
+  it('countryside: rooster only at dawn, animals by day, no tractor in winter/rain', () => {
+    const v = { view: 'countryside' as const };
+    expect(eligibleAmbience(scene({ ...v, timeOfDay: DAWN / 2 }))).toContain('rooster');
+    expect(eligibleAmbience(scene({ ...v, timeOfDay: 0.3 }))).not.toContain('rooster');
+    expect(eligibleAmbience(scene({ ...v }))).not.toContain('rooster'); // time unknown
+    expect(eligibleAmbience(scene({ ...v, isNight: true, timeOfDay: 0.01 }))).not.toContain('rooster');
+    expect(eligibleAmbience(scene({ ...v }))).toEqual(expect.arrayContaining(['sheep', 'cow', 'tractor', 'birds']));
+    expect(eligibleAmbience(scene({ ...v, season: 3 }))).not.toContain('tractor');
+    expect(eligibleAmbience(scene({ ...v, weather: 'rain' }))).not.toContain('tractor');
+    expect(eligibleAmbience(scene({ ...v, isNight: true }))).not.toContain('sheep');
+    expect(loopLevels(scene({ ...v, isNight: true, season: 1 })).crickets).toBe(1);
+  });
+
+  it('forest: songbirds/woodpecker by day, owl and frogs at night, quieter in winter', () => {
+    const v = { view: 'forest' as const };
+    expect(eligibleAmbience(scene({ ...v }))).toEqual(expect.arrayContaining(['songbird', 'woodpecker']));
+    expect(eligibleAmbience(scene({ ...v, weather: 'rain' }))).not.toContain('songbird');
+    expect(eligibleAmbience(scene({ ...v, season: 3 }))).not.toContain('songbird');
+    expect(eligibleAmbience(scene({ ...v, isNight: true }))).toContain('owl');
+    expect(loopLevels(scene({ ...v, isNight: true, season: 1 })).frogs).toBeGreaterThan(0);
+    expect(loopLevels(scene({ ...v, isNight: true, season: 2 })).frogs).toBe(0);
+    expect(loopLevels(scene({ ...v, isNight: false, season: 1 })).frogs).toBe(0);
+    expect(loopLevels(scene({ ...v, season: 3 })).stream).toBeLessThan(loopLevels(scene({ ...v, season: 1 })).stream);
+  });
+
+  it('view beds: waves / hum / breeze / pines+stream only in their view, room tone everywhere', () => {
+    const own: Record<string, (keyof ReturnType<typeof loopLevels>)[]> = {
+      street: [],
+      seaside: ['waves'],
+      city: ['hum'],
+      countryside: ['breeze'],
+      forest: ['pines', 'stream'],
+    };
+    const viewBeds = ['waves', 'hum', 'breeze', 'pines', 'stream'] as const;
+    for (const view of AUDIO_VIEWS) {
+      const l = loopLevels(scene({ view }));
+      expect(Object.keys(l).sort()).toEqual([...LOOP_IDS].sort());
+      expect(l.room).toBe(1);
+      for (const b of viewBeds) {
+        if (own[view].includes(b)) expect(l[b], `${view}.${b}`).toBeGreaterThan(0);
+        else expect(l[b], `${view}.${b}`).toBe(0);
+      }
+    }
+    // weather alters the beds: storm swells the sea, snow muffles the city, wind takes over the grass
+    expect(loopLevels(scene({ view: 'seaside', weather: 'storm' })).waves).toBeGreaterThan(
+      loopLevels(scene({ view: 'seaside', weather: 'snow' })).waves,
+    );
+    expect(loopLevels(scene({ view: 'city', weather: 'snow' })).hum).toBeLessThan(loopLevels(scene({ view: 'city' })).hum);
+    expect(loopLevels(scene({ view: 'city', isNight: true })).hum).toBeLessThan(loopLevels(scene({ view: 'city' })).hum);
+    expect(loopLevels(scene({ view: 'countryside', weather: 'storm' })).breeze).toBe(0);
+    // crickets are faint in town
+    const night = { isNight: true, season: 1 as const };
+    expect(loopLevels(scene({ view: 'city', ...night })).crickets).toBeLessThan(loopLevels(scene(night)).crickets);
+  });
+
+  it('winter and night space intermittent sounds further apart', () => {
+    const r = () => 0.5;
+    expect(nextAmbienceDelay(scene({ season: 3 }), r)).toBeGreaterThan(nextAmbienceDelay(scene({ season: 1 }), r));
+    expect(nextAmbienceDelay(scene({ isNight: true }), r)).toBeGreaterThan(nextAmbienceDelay(scene(), r));
+  });
+
+  it('music flavour: brighter spring/summer, mellower autumn/winter, sparser at night', () => {
+    const spring = musicFlavor(scene({ season: 0 }));
+    const winter = musicFlavor(scene({ season: 3 }));
+    expect(spring.tone).toBeGreaterThan(musicFlavor(scene({ season: 2 })).tone);
+    expect(spring.tone).toBeGreaterThan(winter.tone);
+    expect(spring.bpm[0]).toBeGreaterThan(winter.bpm[0]);
+    expect(musicFlavor(scene({ isNight: true })).density).toBeLessThan(musicFlavor(scene()).density);
+    expect(musicFlavor(null).density).toBe(1);
+    for (const f of [spring, winter, musicFlavor(null), musicFlavor(scene({ isNight: true, season: 2 }))]) {
+      expect(f.keys.length).toBeGreaterThan(0);
+      expect(f.progressions.length).toBeGreaterThan(0);
+      expect(f.bpm[1]).toBeGreaterThanOrEqual(f.bpm[0]);
+    }
+  });
+
+  it('sfx channels: world events follow the ambience switch, interactions the sfx switch', () => {
+    for (const s of [...NEW_WORLD, 'thunder', 'car', 'meow', 'bark'] as Sfx[]) expect(sfxChannel(s), s).toBe('ambience');
+    for (const s of [...NEW_UI, 'coin', 'achievement', 'click', 'checkin'] as Sfx[]) expect(sfxChannel(s), s).toBe('sfx');
+    for (const s of [...NEW_WORLD, ...NEW_UI]) expect(SFX_NAMES).toContain(s);
+    expect(new Set(SFX_NAMES).size).toBe(SFX_NAMES.length);
+  });
+});
+
+describe('AudioEngine: views and new sounds', () => {
+  it('every new sound plays without throwing, creates nodes, and cleans up after itself', async () => {
+    const { engine, ctx } = makeEngine();
+    engine.setEnabled({ sfx: true, music: false, typing: false, ambience: true });
+    await engine.unlock();
+    for (const s of [...NEW_WORLD, ...NEW_UI]) {
+      const n = ctx().created.length;
+      expect(() => engine.play(s), s).not.toThrow();
+      const nodes = ctx().created.slice(n);
+      expect(nodes.length, s).toBeGreaterThan(0);
+      nodes.filter((x) => x.onended).forEach((x) => x.onended!());
+      expect(nodes.every((x) => x.disconnected > 0), s).toBe(true);
+    }
+  });
+
+  it('gates world events on ambience and interactions on sfx', async () => {
+    const { engine, ctx } = makeEngine();
+    await engine.unlock();
+    const sounds = (en: { sfx: boolean; ambience: boolean }) => {
+      engine.setEnabled({ ...en, music: false, typing: false });
+      return SFX_NAMES.filter((s) => {
+        const n = ctx().created.length;
+        engine.play(s);
+        return ctx().created.length > n;
+      });
+    };
+    expect(sounds({ sfx: true, ambience: false })).toEqual(SFX_NAMES.filter((s) => sfxChannel(s) === 'sfx'));
+    expect(sounds({ sfx: false, ambience: true })).toEqual(SFX_NAMES.filter((s) => sfxChannel(s) === 'ambience'));
+    expect(sounds({ sfx: false, ambience: false })).toEqual([]);
+  });
+
+  it('every intermittent ambience sound renders without errors', async () => {
+    const { engine, ctx } = makeEngine();
+    engine.setEnabled({ sfx: false, music: false, typing: false, ambience: true });
+    await engine.unlock();
+    const priv = engine as unknown as { playAmbience(id: AmbienceId, t: number): void };
+    for (const id of Object.keys(AMBIENCE_WEIGHTS) as AmbienceId[]) {
+      const n = ctx().created.length;
+      expect(() => priv.playAmbience(id, 1000.5), id).not.toThrow();
+      expect(ctx().created.length, id).toBeGreaterThan(n);
+    }
+  });
+
+  it('builds the view bed when the view changes and tears the old one down', async () => {
+    const { engine, ctx } = makeEngine();
+    engine.setEnabled({ sfx: false, music: false, typing: false, ambience: true });
+    await engine.unlock();
+    const srcs = () => ctx().created.filter((x) => x.kind === 'buffer' || x.kind === 'osc');
+    engine.update(scene({ view: 'street' }));
+    const n = srcs().length;
+    engine.update(scene({ view: 'seaside' }));
+    const sea = srcs().slice(n);
+    expect(sea.length).toBeGreaterThan(0);
+    expect(sea.every((x) => x.started && !x.stopped)).toBe(true);
+    vi.advanceTimersByTime(20_000); // swells get scheduled
+    engine.update(scene({ view: 'forest' }));
+    expect(sea.every((x) => x.stopped)).toBe(true);
+    // ambience off → every bed goes away (incl. room tone)
+    const before = srcs().length;
+    engine.setEnabled({ sfx: false, music: false, typing: false, ambience: false });
+    const loops = srcs()
+      .slice(0, before)
+      .filter((x) => (x as unknown as { loop?: boolean }).loop);
+    expect(loops.length).toBeGreaterThan(0);
+    expect(loops.every((x) => x.stopped)).toBe(true);
+  });
+
+  it('runs every view through day/night, seasons and weather without scheduler errors', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { engine, ctx } = makeEngine();
+    engine.setEnabled({ sfx: true, music: true, typing: true, ambience: true });
+    await engine.unlock();
+    let i = 0;
+    for (const view of AUDIO_VIEWS) {
+      for (const weather of WEATHERS) {
+        engine.update(
+          scene({
+            view,
+            weather,
+            studying: i % 2 === 0,
+            isNight: i % 3 === 1,
+            season: (i % 4) as 0 | 1 | 2 | 3,
+            timeOfDay: (i % 3 === 1 ? 0.7 : 0.02),
+            pets: ['cat', 'fish-tank'],
+          }),
+        );
+        vi.advanceTimersByTime(40_000);
+        i++;
+      }
+    }
+    expect(warn).not.toHaveBeenCalled();
+    expect(ctx().created.length).toBeGreaterThan(500);
+    warn.mockRestore();
   });
 });

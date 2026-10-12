@@ -1,5 +1,7 @@
 // Study Buddy app entry: builds the shell, runs the main loop and wires audio, sync and the views.
 import './ui/styles.css';
+import './ui/world.css';
+import './ui/goals.css';
 import * as actions from './core/actions';
 import type { AppState } from './core/types';
 import type { SessionEvent } from './core/session';
@@ -19,8 +21,14 @@ import { createRoomView } from './ui/roomview';
 import { createSessionController } from './ui/session';
 import { createShopView } from './ui/shop';
 import { createStatsView } from './ui/stats';
-import { createAwardsView } from './ui/awards';
+import { createGoalsView } from './ui/goals';
+import { createFriendsView } from './ui/friends';
+import { startSocial } from './ui/social';
+import { hoursMilestone, simMilestone } from './ui/goalsvm';
+import { claimableCount } from './core/quests';
+import { letterWaiting } from './core/letters';
 import { createSettingsView } from './ui/settings';
+import { createWorld } from './ui/world';
 import { deriveSession, PET_IDS, sceneMode } from './ui/viewmodel';
 import type { Ctx } from './ui/context';
 
@@ -53,12 +61,29 @@ const room = createRoomView(ctx, sc);
 const views = {
   shop: createShopView(ctx),
   stats: createStatsView(ctx),
-  awards: createAwardsView(ctx),
+  goals: createGoalsView(ctx),
+  friends: createFriendsView(ctx),
   settings: createSettingsView(ctx),
 } satisfies Partial<Record<Tab, { el: HTMLElement; render(force?: boolean): void }>>;
 type PanelTab = keyof typeof views;
 
 const tabButtons = new Map<Tab, HTMLButtonElement>();
+// dot on Goals when a quest reward is waiting or today's letter hasn't been opened
+const goalsBadge = h('span', { class: 'tab-badge', hidden: true, 'aria-hidden': 'true' });
+let badgeAt = 0;
+let badgeFor: AppState | null = null;
+function updateBadge(s: AppState, now: number) {
+  if (s === badgeFor && now - badgeAt < 5000) return;
+  badgeFor = s;
+  badgeAt = now;
+  const n = claimableCount(s, now);
+  const show = n > 0 || letterWaiting(s, now);
+  goalsBadge.hidden = !show;
+  goalsBadge.textContent = n > 0 ? String(n) : '';
+  goalsBadge.classList.toggle('dot-only', n === 0);
+  const btn = tabButtons.get('goals');
+  btn?.setAttribute('aria-label', n > 0 ? `Goals — ${n} reward${n === 1 ? '' : 's'} to claim` : show ? 'Goals — a letter is waiting' : 'Goals');
+}
 const nav = h(
   'nav',
   { class: 'tabbar', 'aria-label': 'Main' },
@@ -69,6 +94,7 @@ const nav = h(
       h('span', { class: 'tab-icon', 'aria-hidden': 'true' }, t.icon),
       h('span', { class: 'tab-label' }, t.label),
     );
+    if (t.id === 'goals') b.append(goalsBadge);
     tabButtons.set(t.id, b);
     return b;
   }),
@@ -83,7 +109,7 @@ const expandBtn = h(
   'button',
   { type: 'button', class: 'panel-expand', title: 'Show panel ( \\ )', 'aria-label': 'Show side panel', onclick: () => setCollapsed(false) },
   h('span', { 'aria-hidden': 'true' }, '⟨'),
-  h('span', null, 'Shop · Stats · More'),
+  h('span', null, 'Shop · Goals · Friends'),
 );
 function setCollapsed(c: boolean) {
   prefs.panelCollapsed = c;
@@ -153,7 +179,11 @@ const renderer = new RoomRenderer(room.canvas, {
   onCar: (dir) => Math.random() < 0.3 && audio.play('car', { dir }),
   onThunder: () => audio.play('thunder'),
   onPet: (p) => audio.play(p === 'cat' ? 'meow' : 'bark'),
+  onWorldEvent: (k) => world.onWorldEvent(k),
+  onCatch: (k) => world.onCatch(k),
 });
+// bubbles, tap interactions, letter, customise / share, visit + zen modes, onboarding
+const world = createWorld(ctx, { room, renderer, sc });
 
 // ───────────── notifications ─────────────
 async function notify(title: string, body: string) {
@@ -210,7 +240,7 @@ function step(now: number) {
 // ───────────── store reactions ─────────────
 store.subscribe((s, prev) => {
   // Data merged in from sync/import may qualify for achievements nobody has evaluated yet.
-  if (s.sessions !== prev.sessions || s.purchases !== prev.purchases) {
+  if (s.sessions !== prev.sessions || s.purchases !== prev.purchases || s.bonuses !== prev.bonuses || s.friends !== prev.friends) {
     const ev = actions.evaluateAchievements(s, Date.now());
     if (ev.unlocked.length) {
       queueMicrotask(() => store.set(ev.state));
@@ -241,9 +271,11 @@ cloud.onChange(() => {
 header.setSync(cloud.status);
 {
   const ev = actions.evaluateAchievements(store.get(), Date.now());
-  if (ev.unlocked.length) store.set(ev.state);
+  // deferred: the store reaction calls updateDom(), whose state is declared further down this module
+  if (ev.unlocked.length) queueMicrotask(() => store.set(ev.state));
 }
 void cloud.configure(loadSyncConfig());
+startSocial(ctx);
 
 // ───────────── main loop ─────────────
 let itemsCache: Set<string> | null = null;
@@ -257,13 +289,30 @@ function items(s: AppState) {
 }
 
 let lastDom = 0;
+// ───────────── milestones (new sim day / season / year, every 10 hours) ─────────────
+let milestoneTotal = -1;
+function checkMilestones(total: number, studying: boolean) {
+  const prevTotal = milestoneTotal;
+  milestoneTotal = total;
+  if (prevTotal < 0 || total <= prevTotal) return;
+  const m = studying ? simMilestone(prevTotal, total) : hoursMilestone(prevTotal, total);
+  if (!m) return;
+  const t = toast(m.text, m.icon, m.big ? 6000 : 3500, 'milestone');
+  if (m.big) {
+    t.classList.add('toast-big');
+    audio.play('level' as never);
+  }
+}
 let lastAudio = 0;
 function updateDom(now: number) {
   lastDom = now;
   const s = store.get();
   const total = totalStudiedMs(s, now);
   header.update(s, now);
-  room.update(s, now, simTime(total), weatherAt(total));
+  const simTotal = world.simTotal(total); // a visited friend's clock while visiting
+  room.update(s, now, simTime(simTotal), weatherAt(simTotal));
+  updateBadge(s, now);
+  checkMilestones(total, sceneMode(s.active) === 'studying');
   const v = deriveSession(s, now);
   const title = v.status === 'idle' ? 'Study Buddy' : `${v.status === 'running' ? '▶' : '❚❚'} ${v.timer} · Study Buddy`;
   if (document.title !== title) document.title = title;
@@ -275,12 +324,13 @@ function frame() {
   const now = Date.now();
   step(now);
   const s = store.get();
-  const total = totalStudiedMs(s, now);
+  const total = world.simTotal(totalStudiedMs(s, now));
   const sim = simTime(total);
   const weather = weatherAt(total);
   const mode = sceneMode(s.active);
   const its = items(s);
-  renderer.render({
+  // world.scene swaps in a friend's room while visiting
+  const scene = world.scene({
     time: performance.now() / 1000,
     sim,
     weather,
@@ -292,16 +342,20 @@ function frame() {
     studiedHours: total / 3_600_000,
     realNow: now,
   });
+  renderer.render(scene);
+  world.frame(now, scene);
   if (now - lastDom >= 250) updateDom(now);
   if (now - lastAudio >= 1000) {
     lastAudio = now;
     audio.update({
-      studying: mode === 'studying',
+      studying: mode === 'studying' && !world.visiting,
       onBreak: mode === 'break' || mode === 'paused',
       isNight: sim.isNight,
       season: sim.season,
       weather,
-      pets: PET_IDS.filter((p) => its.has(p)),
+      pets: PET_IDS.filter((p) => scene.items.has(p)),
+      view: scene.room.view,
+      timeOfDay: sim.t,
     });
   }
 }
