@@ -318,7 +318,8 @@ export class RoomRenderer {
         } catch {
           /* ignore */
         }
-        return { ...this.lastTap };
+        // just caught (it flew off): point at where it was tapped, if anywhere
+        return this.lastTap.x || this.lastTap.y ? { ...this.lastTap } : null;
       }
       case 'robot-vacuum':
       case 'parrot': {

@@ -159,13 +159,13 @@ export class Outside {
 
   /** Catchable world event at logical canvas px (x, y), as last drawn (see the header comment). */
   hitTest(x: number, y: number): WorldEventKind | null {
-    if (x < WX - 2 || x > WX + WW + 2 || y < WY - 2 || y > WY + WH + 2) return null;
+    if (!onGlass(x, y)) return null;
     return this.director.kindAt(x - WX, y - WY);
   }
 
   /** Catch the thing at (x, y): it reacts and ev.onCatch(kind) fires. Returns its kind, or null. */
   catchAt(x: number, y: number, time: number): WorldEventKind | null {
-    if (x < WX - 2 || x > WX + WW + 2 || y < WY - 2 || y > WY + WH + 2) return null;
+    if (!onGlass(x, y)) return null;
     const e = this.director.catch(x - WX, y - WY, time);
     if (!e) return null;
     this.ev.onCatch?.(e.kind);
@@ -184,6 +184,9 @@ export class Outside {
     return this.director.start(kind, this.c, this.view(this.viewId), this.last - age);
   }
 }
+
+/** Taps only count on the glass itself (WIN x 14..81, y 15..72). */
+const onGlass = (x: number, y: number) => x >= WX && x < WX + WW && y >= WY && y < WY + WH;
 
 const FOG_BANDS: Record<ViewId, readonly number[]> = {
   street: [22, 34],

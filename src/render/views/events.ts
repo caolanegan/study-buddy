@@ -30,7 +30,7 @@ interface Ev {
 
 const BALLOONS: [string, string, string][] = [
   ['#e05a4f', '#f2d16b', '#f58a7f'],
-  ['#5aa9e6', '#f4f1e8', '#8cc8f2'],
+  ['#3f6fb0', '#f4f1e8', '#6a94d0'],
   ['#8e5bb5', '#f2b134', '#b48cd6'],
   ['#5fbf77', '#f4f1e8', '#8fd8a0'],
   ['#e08a3c', '#3f6f8f', '#f2aa6a'],
@@ -147,7 +147,7 @@ export class EventDirector {
     switch (kind) {
       case 'balloon':
         e.dur = 55;
-        e.y = 5 + r() * 9;
+        e.y = 11 + r() * 7; // envelope top stays below wooden blinds (top ~10px)
         break;
       case 'kite':
         e.dur = 45;
@@ -165,12 +165,12 @@ export class EventDirector {
       case 'ufo':
         e.dur = 22;
         e.x = 18 + r() * (WW - 36);
-        e.y = 9 + r() * 8;
+        e.y = 14 + r() * 7;
         break;
       case 'shooting-star':
         e.dur = 2.2;
         e.x = dir > 0 ? 3 + r() * 30 : WW - 3 - r() * 30;
-        e.y = 2 + r() * 12;
+        e.y = 10 + r() * 6;
         break;
       case 'rainbow':
         e.dur = 80;
@@ -241,7 +241,9 @@ export class EventDirector {
 
   private addHit(e: Ev, x: number, y: number, r: number) {
     if (e.caught >= 0 || this.hitN >= HIT_MAX || !CATCHABLE.includes(e.kind)) return;
-    if (x < -r || x > WW + r || y < -r || y > WH + r) return;
+    // only things at least half on the glass can be caught; Outside also requires the tap itself to be on
+    // the glass, and anchor() clamps inside it
+    if (x < -2 || x > WW + 1 || y < -2 || y > WH + 1) return;
     const i = this.hitN++;
     this.hitX[i] = x;
     this.hitY[i] = y;
@@ -270,7 +272,8 @@ export class EventDirector {
   /** Window-local position of the first visible catchable (optionally of a kind), for speech-bubble anchors. */
   anchor(kind?: WorldEventKind): { x: number; y: number } | null {
     for (let i = 0; i < this.hitN; i++)
-      if (!kind || this.hitEv[i]!.kind === kind) return { x: this.hitX[i], y: this.hitY[i] - this.hitR[i] * 0.5 };
+      if (!kind || this.hitEv[i]!.kind === kind)
+        return { x: Math.max(2, Math.min(WW - 3, this.hitX[i])), y: Math.max(2, Math.min(WH - 2, this.hitY[i] - this.hitR[i] * 0.5)) };
     return null;
   }
 
@@ -292,8 +295,8 @@ export class EventDirector {
 
   private balloon(p: Painter, e: Ev, age: number, c: ViewCtx) {
     const u = age / e.dur;
-    const span = WW + 22;
-    let x = e.dir > 0 ? -11 + u * span : WW + 11 - u * span;
+    const span = WW + 12;
+    let x = e.dir > 0 ? -6 + u * span : WW + 6 - u * span;
     let y = e.y + Math.sin(age * 0.6) * 1.5 - u * 3;
     const caughtAge = e.caught >= 0 ? c.time - e.caught : -1;
     if (caughtAge >= 0) y -= Math.min(6, caughtAge * 2.5); // burner roars, it climbs a little
@@ -455,7 +458,7 @@ export class EventDirector {
     }
     if (age > e.dur) return;
     const vx = e.dir * (15 + (e.seed % 7));
-    const vy = 6 + (e.seed % 5);
+    const vy = 4 + (e.seed % 4);
     const x = e.x + vx * age;
     const y = e.y + vy * age;
     const a = Math.min(1, age / 0.25) * Math.min(1, (e.dur - age) / 0.6);
@@ -608,7 +611,7 @@ export class EventDirector {
     const s = fly ? (Math.floor(c.time * 14) % 2 ? spr.flyA : spr.flyB) : peck ? spr.peck : spr.sit;
     drawSprite(p, s, Math.round(x), Math.round(y), face < 0);
     if (caught >= 0) this.feather(p, e, caught);
-    else if (!fly) this.addHit(e, x + 3, y + 2, 7);
+    else if (age < outStart) this.addHit(e, x + 3, y + 2, 7);
   }
 
   private feather(p: Painter, e: Ev, k: number) {
