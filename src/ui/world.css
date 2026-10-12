@@ -506,3 +506,10 @@ html.zen-on .toasts, body:has(.modal.customize) .toasts {
   .zen-window { display: block; width: 100%; height: auto; aspect-ratio: 68 / 58; image-rendering: pixelated; border-radius: 2px; }
   .zen-slot { width: 100vw; }
 }
+
+/* visiting on desktop: their room takes the stage (your shop/goals panel isn't relevant there) */
+@media (min-width: 900px) {
+  .app.visiting .layout { grid-template-columns: minmax(0, 1fr); }
+  .app.visiting .col-right, .app.visiting .panel-expand { display: none !important; }
+  .app.visiting .col-left { position: static; width: 100%; max-width: max(640px, calc((100vh - 200px) * 1.6)); margin: 0 auto; }
+}
