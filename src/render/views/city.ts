@@ -89,10 +89,10 @@ export class CityView implements View {
     this.neon(m, c);
 
     // the elevated train (drawn over the mid layer, under the near rooftops)
-    const train = this.trainX(c);
-    if (train !== null) this.drawTrain(p, train.x, train.dir, c);
+    const train = this.trainAt(c);
+    if (train) this.drawTrain(p, this.tx, this.tdir, c);
     d.flush(0.1);
-    if (train !== null && c.night > 0.2) this.trainLights(m, train.x, train.dir, c);
+    if (train && c.night > 0.2) this.trainLights(m, this.tx, this.tdir, c);
 
     d.blit(this.layers.cs[2]);
     this.street(p, c);
@@ -221,8 +221,10 @@ export class CityView implements View {
     p.rect(34, GAP_Y - 10, 3, 3, '#2d2d35');
   }
 
-  /** Train pass: every ~45s (or when forced). Returns its head x and direction, or null. */
-  private trainX(c: ViewCtx): { x: number; dir: 1 | -1 } | null {
+  private tx = 0;
+  private tdir: 1 | -1 = 1;
+  /** Train pass: every ~47s (or when forced). Sets this.tx / this.tdir; false when no train. */
+  private trainAt(c: ViewCtx): boolean {
     const len = 42;
     const speed = 30;
     const passT = (WW + len + 10) / speed;
@@ -236,14 +238,15 @@ export class CityView implements View {
       const slot = Math.floor(c.time / period);
       age = c.time - slot * period;
       dir = slot % 2 ? 1 : -1;
-      if (age > passT) return null;
+      if (age > passT) return false;
       if (slot !== this.lastTrainSlot) {
         this.lastTrainSlot = slot;
         c.report('train');
       }
     }
-    const x = dir > 0 ? -len - 4 + age * speed : WW + 4 - age * speed;
-    return { x, dir };
+    this.tx = dir > 0 ? -len - 4 + age * speed : WW + 4 - age * speed;
+    this.tdir = dir;
+    return true;
   }
 
   private drawTrain(p: Painter, x: number, dir: 1 | -1, c: ViewCtx) {

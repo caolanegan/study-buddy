@@ -61,7 +61,7 @@ describe('buddy poses', () => {
     const late = Array.from({ length: 8 }, (_, i) => poseFor(scene({ mode: 'idle', hours: 0.9, time: i * 12 + 1 })));
     expect(late.filter((p) => p === 'sleeping').length).toBeGreaterThanOrEqual(4);
   });
-  it('reactions wake him and pick a matching pose', () => {
+  it('reactions wake the buddy and pick a matching pose', () => {
     expect(reactPose(null, 'sleeping')).toBe('sleeping');
     expect(reactPose({ kind: 'wave', k: 0.5 }, 'sleeping')).toBe('resting');
     expect(reactPose({ kind: 'sip', k: 0.5 }, 'typing')).toBe('sipping');

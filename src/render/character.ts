@@ -18,8 +18,8 @@ export type Pose =
   | 'rubbing';
 
 /**
- * Where he is: at the desk (sitting), standing at a raised standing desk, gaming in front of the TV,
- * or lounging (beanbag / sofa). Only breaks take him away from the chair.
+ * Where the buddy is: at the desk (sitting), standing at a raised standing desk, gaming in front of the TV,
+ * or lounging (beanbag / sofa). Only breaks take them away from the chair.
  */
 export type Activity = 'desk' | 'stand' | 'game' | 'lounge';
 
@@ -45,10 +45,10 @@ const SHOP_TOPS: Record<string, [string, string, string]> = {
 };
 const SHOP_TOP_IDS = ['hoodie-green', 'hoodie-black', 'sweater'];
 
-/** Length of one break-activity slot (s): with several break toys he rotates between them. */
+/** Length of one break-activity slot (s): with several break toys the buddy rotates between them. */
 const BREAK_SLOT = 36;
 
-/** What he's doing right now (only breaks move him away from the desk). */
+/** What the buddy is doing right now (only breaks move them away from the desk). */
 export function activityFor(s: RenderScene): Activity {
   if (s.mode !== 'break') return 'desk';
   const it = s.items;
@@ -66,7 +66,7 @@ const IDLE_LATE: Pose[] = ['yawning', 'sleeping', 'sleeping', 'rubbing', 'sleepi
 
 /**
  * Which pose to show for the current mode; idle cycles through little activities.
- * `coffee` (0..1) is how full the mug is: he only sips while there's coffee left.
+ * `coffee` (0..1) is how full the mug is: they only sip while there's coffee left.
  */
 export function poseFor(s: RenderScene, coffee = 1): Pose {
   const act = activityFor(s);
@@ -75,7 +75,7 @@ export function poseFor(s: RenderScene, coffee = 1): Pose {
   const t = s.time;
   const night = s.sim.isNight;
   if (s.mode === 'studying') {
-    // a sip every ~50s while there's coffee; rubs his eyes / yawns now and then late at night
+    // a sip every ~50s while there's coffee; rubs their eyes / yawns now and then late at night
     if (coffee > 0 && t % 53 < 3) return 'sipping';
     if (night && t % 97 > 94) return s.sim.t > 0.8 ? 'yawning' : 'rubbing';
     return 'typing';
@@ -91,7 +91,7 @@ export function poseFor(s: RenderScene, coffee = 1): Pose {
   return p === 'sipping' && coffee <= 0 ? 'reading' : p;
 }
 
-/** The pose a running reaction forces (he wakes up for any tap). */
+/** The pose a running reaction forces (they wake up for any tap). */
 export function reactPose(r: CharReact | null | undefined, base: Pose): Pose {
   if (!r) return base;
   if (r.kind === 'sip') return 'sipping';
@@ -99,7 +99,7 @@ export function reactPose(r: CharReact | null | undefined, base: Pose): Pose {
   return 'resting';
 }
 
-/** Mug position on the desk (moves to his hand while sipping). */
+/** Mug position on the desk (moves to their hand while sipping). */
 export const MUG = { x: 171, y: 76 };
 
 /** Head centre when sitting on the sofa / beanbag / floor. */
@@ -163,7 +163,7 @@ function palOf(s: RenderScene): Pal {
 
 // ───────────────────────── body ─────────────────────────
 
-/** Where his head is drawn (canvas px) — shared by the drawing, hit tests and speech-bubble anchors. */
+/** Where their head is drawn (canvas px) — shared by the drawing, hit tests and speech-bubble anchors. */
 export function headAt(s: RenderScene, pose: Pose, act: Activity, react?: CharReact | null): { x: number; y: number } {
   const t = s.time;
   if (act === 'game') {
@@ -181,7 +181,7 @@ export function headAt(s: RenderScene, pose: Pose, act: Activity, react?: CharRe
 
 const gameLean = (t: number) => Math.round(Math.sin(t * 0.9) * 1.4 * (Math.sin(t * 0.37) > 0.3 ? 1 : 0));
 const jumpDy = (r?: CharReact | null) => (r && r.kind === 'jump' ? -Math.round(Math.sin(Math.min(1, r.k / 0.7) * Math.PI) * 5) : 0);
-/** Shoulders rise a pixel as he breathes in. */
+/** Shoulders rise a pixel as they breathe in. */
 const breathOf = (t: number, slow: boolean) => (Math.sin(t * (slow ? 0.9 : 1.35)) > 0.35 ? 1 : 0);
 
 const sit = { bob: 0, headX: 0, dy: 0, tilt: 0 };
@@ -311,7 +311,7 @@ function drawSitter(p: Painter, s: RenderScene, P: Pal, pose: Pose, dx: number, 
   } else if (pose === 'sleeping') {
     p.rect(132, 80, 36, 6, shade); // folded arms on desk
   } else if (pose === 'rubbing') {
-    // elbows out, fists up at his eyes
+    // elbows out, fists up at their eyes
     p.rect(131, 72, 5, 12, shade);
     p.rect(164, 72, 5, 12, shade);
   } else {
@@ -402,7 +402,7 @@ function drawGesture(p: Painter, P: Pal, r: CharReact | null, hx: number, hy: nu
       p.px(171, 63, '#ffffff');
     }
   } else if (r.kind === 'jump') {
-    // a little "!" pops above his head
+    // a little "!" pops above their head
     const y = hy - 17;
     p.rect(hx + 9, y, 2, 4, '#f2b134');
     p.rect(hx + 9, y + 5, 2, 1, '#f2b134');
@@ -498,7 +498,7 @@ const FIT: Record<HairStyle, { crown: number; band: number; wide: number; earsHi
 };
 const HAIR_STYLE_IDS = Object.keys(FIT) as HairStyle[];
 
-/** How far above the head centre the top of his hair / hat reaches (px), for speech-bubble anchors. */
+/** How far above the head centre the top of their hair / hat reaches (px), for speech-bubble anchors. */
 export function headTop(s: RenderScene): number {
   const style: HairStyle = HAIR_STYLE_IDS.includes(s.look?.hair as HairStyle) ? (s.look.hair as HairStyle) : 'short';
   const hairTop = { afro: 15, spiky: 13, bun: 12, curly: 10, buzz: 6 }[style as string] ?? 8;
@@ -779,7 +779,7 @@ const FACE_ROWS: [number, number, number][] = [
   [5, 3, 6],
   [6, 4, 5],
 ];
-/** A 3/4 peek at his face as he turns back toward us (side 1 = over his right shoulder). */
+/** A 3/4 peek at their face as they turn back toward us (side 1 = over their right shoulder). */
 function drawFace(p: Painter, P: Pal, x: number, y: number, side: 1 | -1, expr: Expr, earsHidden: boolean) {
   const X = (dx: number) => (side > 0 ? x + dx : x - dx);
   const span = (dy: number, a: number, b: number, c: string) => p.rect(side > 0 ? x + a : x - b, y + dy, b - a + 1, 1, c);
@@ -789,7 +789,7 @@ function drawFace(p: Painter, P: Pal, x: number, y: number, side: 1 | -1, expr: 
   p.px(X(7), y + 5, P.KS);
   p.px(X(8), y + 3, P.KS); // under the nose
   if (!earsHidden) {
-    // the near ear, now toward the middle of his head
+    // the near ear, now toward the middle of their head
     p.rect(side > 0 ? x - 1 : x, y + 1, 2, 3, P.K);
     p.px(X(0), y + 2, P.KS);
   }
@@ -816,7 +816,7 @@ function drawFace(p: Painter, P: Pal, x: number, y: number, side: 1 | -1, expr: 
 /**
  * Back of the head with hair, ears and every head accessory.
  * Order matters so hats and headphones combine: bands go over beanies/caps, under crowns/wizard hats.
- * look -1: cheek peeking as he looks left; tilt: one ear dips (thoughtful head tilt).
+ * look -1: cheek peeking as they look left; tilt: one ear dips (thoughtful head tilt).
  */
 export function drawHead(p: Painter, s: RenderScene, hx: number, hy: number, look: number, tilt = 0, react: CharReact | null = null, pal?: Pal) {
   const P = pal ?? palOf(s);
@@ -836,7 +836,7 @@ export function drawHead(p: Painter, s: RenderScene, hx: number, hy: number, loo
     p.rect(hx + 7, hy + 4, 2, 1, P.K);
   }
   if (style === 'ponytail') drawPonytail(p, P, hx, hy, s.time, cover === 'hat');
-  if (look < 0 && !fit.earsHidden) p.rect(hx - 7, hy + 1, 2, 4, P.K); // cheek peeking as he looks left
+  if (look < 0 && !fit.earsHidden) p.rect(hx - 7, hy + 1, 2, 4, P.K); // cheek peeking as they look left
   if (look < 0 && fit.earsHidden) p.rect(hx - 9 - (style === 'afro' ? 2 : 0), hy + 2, 1, 3, P.K);
 
   // turning round to look at us (tap reactions)

@@ -296,6 +296,7 @@ function makeSteam() {
   const clear = new Set<number>();
   const r = rng(77);
   for (let i = 0; i < 6; i++) clear.add(Math.floor(4 + r() * (WW - 8)));
+  const img = g.createImageData(WW, WH);
   for (let y = 0; y < WH; y++)
     for (let x = 0; x < WW; x++) {
       const edge = Math.min(x, WW - 1 - x, WH - 1 - y) / 14;
@@ -303,9 +304,13 @@ function makeSteam() {
       let a = 0.05 + 0.22 * smooth(0.35, 1, bottom) + 0.14 * (1 - Math.min(1, edge));
       if (clear.has(x) && y > 8 + h01(x) * 20) a *= 0.2;
       if (h01(x * 131 + y * 7) < 0.25) a *= 0.7;
-      g.fillStyle = `rgba(214,222,236,${a})`;
-      g.fillRect(x, y, 1, 1);
+      const o = (y * WW + x) * 4;
+      img.data[o] = 214;
+      img.data[o + 1] = 222;
+      img.data[o + 2] = 236;
+      img.data[o + 3] = Math.round(a * 255);
     }
+  g.putImageData(img, 0, 0);
   return cv;
 }
 
@@ -320,6 +325,8 @@ function makeFrost(level: number) {
     [WW - 1, WH - 1, 0.85],
   ];
   const reach = 4 + level * 13;
+  const img = g.createImageData(WW, WH);
+  const px = img.data;
   for (let y = 0; y < WH; y++)
     for (let x = 0; x < WW; x++) {
       let d = 99;
@@ -331,9 +338,13 @@ function makeFrost(level: number) {
       const k = d / reach;
       const edge = k > 0.84;
       const a = edge ? 0.42 : 0.08 + (1 - k) * 0.3;
-      g.fillStyle = edge ? `rgba(240,248,255,${a})` : `rgba(206,226,246,${a})`;
-      g.fillRect(x, y, 1, 1);
+      const o = (y * WW + x) * 4;
+      px[o] = edge ? 240 : 206;
+      px[o + 1] = edge ? 248 : 226;
+      px[o + 2] = edge ? 255 : 246;
+      px[o + 3] = Math.round(a * 255);
     }
+  g.putImageData(img, 0, 0);
   // fern-like strokes reaching in from the corners
   const r = rng(12);
   for (const [cx, cy] of corners) {

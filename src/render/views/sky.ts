@@ -305,26 +305,35 @@ export class SkyPainter {
   }
 }
 
-/** Aurora curtains (additive). Cheap: 3 rects per column. */
+const auroraCols = new Float32Array(WW * 4);
+/** Aurora curtains (additive). Cheap: 3 passes of one rect per column, no per-column strings. */
 export function drawAurora(p: Painter, time: number, alpha: number, horizon: number) {
   if (alpha <= 0.01) return;
   const g = p.g;
-  g.globalCompositeOperation = 'lighter';
+  const a4 = auroraCols;
   for (let x = 0; x < WW; x++) {
     const w1 = Math.sin(x * 0.11 + time * 0.35) + 0.6 * Math.sin(x * 0.27 - time * 0.6) + 0.3 * Math.sin(x * 0.7 + time * 1.3);
     const top = 3 + w1 * 3 + Math.sin(x * 0.05 + time * 0.1) * 3;
     const len = 9 + 5 * Math.sin(x * 0.17 + time * 0.45) + 3 * Math.sin(x * 0.5 - time);
     const bright = 0.5 + 0.5 * Math.sin(x * 0.21 - time * 0.8 + Math.sin(time * 0.3) * 2);
-    const a = alpha * (0.25 + 0.55 * bright);
-    const bottom = Math.min(horizon, top + len);
     const y0 = Math.round(top);
-    const h = Math.max(1, Math.round(bottom - top));
-    g.fillStyle = `rgba(150,90,220,${a * 0.5})`;
-    g.fillRect(x, y0 - 3, 1, 3);
-    g.fillStyle = `rgba(60,230,150,${a * 0.55})`;
-    g.fillRect(x, y0, 1, h);
-    g.fillStyle = `rgba(160,255,200,${a * 0.5})`;
-    g.fillRect(x, y0 + h - 2, 1, 2);
+    a4[x * 4] = y0;
+    a4[x * 4 + 1] = Math.max(1, Math.round(Math.min(horizon, top + len) - top));
+    a4[x * 4 + 2] = alpha * (0.25 + 0.55 * bright);
   }
+  g.globalCompositeOperation = 'lighter';
+  const pass = (col: string, k: number, dy: (y0: number, h: number) => number, hh: (h: number) => number) => {
+    g.fillStyle = col;
+    for (let x = 0; x < WW; x++) {
+      const y0 = a4[x * 4];
+      const h = a4[x * 4 + 1];
+      g.globalAlpha = Math.min(1, a4[x * 4 + 2] * k);
+      g.fillRect(x, dy(y0, h), 1, hh(h));
+    }
+  };
+  pass('rgb(150,90,220)', 0.5, (y0) => y0 - 3, () => 3);
+  pass('rgb(60,230,150)', 0.55, (y0) => y0, (h) => h);
+  pass('rgb(160,255,200)', 0.5, (y0, h) => y0 + h - 2, () => 2);
+  g.globalAlpha = 1;
   g.globalCompositeOperation = 'source-over';
 }

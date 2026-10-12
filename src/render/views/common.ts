@@ -215,8 +215,10 @@ export function pine(p: Painter, x: number, base: number, h: number, lit: string
     p.rect(x - hw, y, hw + 1, 1, lit);
     p.rect(x + 1, y, hw, 1, shade);
     if (snow && tier === 0 && r > 0 && (r % 8 === 4 || h < 12)) {
-      p.rect(x - hw, y, Math.max(1, hw - 1), 1, SNOW);
+      // snow resting on the tips of each tier
+      p.rect(x - hw, y, Math.min(3, Math.max(1, hw - 1)), 1, SNOW);
       p.px(x + hw, y, SNOW_SHADE);
+      if (hw > 4) p.px(x, y, SNOW);
     }
   }
   if (snow) p.px(x, top, SNOW);

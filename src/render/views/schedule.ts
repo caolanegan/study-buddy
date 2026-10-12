@@ -57,6 +57,10 @@ export const REPORT_GAP: Partial<Record<WorldEventKind, number>> = {
   fireworks: 240,
 };
 
+/** Ambient things not announced in the first seconds after the window starts drawing (no bubble on load). */
+export const QUIET_AT_START: readonly WorldEventKind[] = ['train', 'plane', 'boat'];
+export const START_GRACE = 20;
+
 const DAY = (c: Conditions) => c.night < 0.25;
 const DARK = (c: Conditions) => c.night > 0.8;
 const OPEN = (c: Conditions) => c.weather === 'clear' || c.weather === 'cloudy';

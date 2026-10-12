@@ -22,7 +22,7 @@ import { Depth, type View, type ViewCtx } from './views/common';
 import { SkyPainter, skyAt, type Sky } from './views/sky';
 import { WeatherFx } from './views/weather';
 import { EventDirector } from './views/events';
-import { REPORT_GAP } from './views/schedule';
+import { QUIET_AT_START, REPORT_GAP, START_GRACE } from './views/schedule';
 import { StreetView } from './views/street';
 import { SeasideView } from './views/seaside';
 import { CityView } from './views/city';
@@ -49,6 +49,7 @@ export class Outside {
   private month = 0;
   private viewId: ViewId = 'street';
   private ready = false;
+  private start = 0;
   private c: ViewCtx = {
     s: null as unknown as RenderScene,
     sky: null as unknown as Sky,
@@ -84,6 +85,7 @@ export class Outside {
   }
 
   private report(kind: WorldEventKind) {
+    if (QUIET_AT_START.includes(kind) && this.c.time - this.start < START_GRACE) return;
     const last = this.reported.get(kind);
     const gap = REPORT_GAP[kind] ?? 45;
     if (last !== undefined && this.c.time - last < gap && this.c.time >= last) return;
@@ -92,6 +94,7 @@ export class Outside {
   }
 
   draw(p: Painter, s: RenderScene, sky: Sky, ev: RenderEvents) {
+    if (this.last < 0 || s.time < this.last - 1) this.start = s.time;
     const dt = this.last < 0 ? 0 : Math.min(0.1, Math.max(0, s.time - this.last));
     this.last = s.time;
     this.ev = ev;

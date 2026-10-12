@@ -37,7 +37,7 @@ export function plantStage(hours: number): number {
   return st;
 }
 
-/** Seconds of studying it takes him to finish a full mug. */
+/** Seconds of studying it takes the buddy to finish a full mug. */
 export const COFFEE_SECONDS = 45 * 60;
 
 /** Pixel-art heart (5x4) rows. */
@@ -160,7 +160,7 @@ export class RoomRenderer {
     this.events = ev;
   }
 
-  /** How full his mug is (0..1). */
+  /** How full their mug is (0..1). */
   get coffeeLevel() {
     return this.coffee;
   }
@@ -224,7 +224,7 @@ export class RoomRenderer {
       case 'mug':
         this.mugTap = time;
         if (this.lastAct !== 'desk') break;
-        if (this.coffee <= 0.02) this.coffee = 1; // empty: he tops it up
+        if (this.coffee <= 0.02) this.coffee = 1; // empty: they top it up
         else this.coffee = Math.max(0, this.coffee - 0.08);
         this.charReact = { kind: 'sip', start: time };
         break;
@@ -320,6 +320,11 @@ export class RoomRenderer {
         }
         return { ...this.lastTap };
       }
+      case 'robot-vacuum':
+      case 'parrot': {
+        const v = it.has(target) ? movingItemSpot(target, s, this.lastNight) : null;
+        return v ? { x: v.x, y: v.y - (target === 'parrot' ? 13 : 6) } : null;
+      }
       case 'ghost': {
         const g = it.has('ghost-plush') ? movingItemSpot('ghost-plush', s, this.lastNight) : null;
         return g ? { x: g.x, y: g.y - 15 } : null;
@@ -407,7 +412,7 @@ export class RoomRenderer {
     const s = this.last;
     if (!s) return false;
     const act = this.lastAct;
-    // the chair back counts as him (it hides his lower back)
+    // the chair back counts as the buddy (it hides their lower back)
     if (act === 'desk' && x >= 136 && x < 164 && y >= 93 && y < 114) return true;
     const sp = this.scratchPainter();
     drawCharacter(sp, s, this.lastPose, act, this.activeReact(s.time));
@@ -433,7 +438,7 @@ export class RoomRenderer {
     const night = 1 - sky.day;
     const act = activityFor(s);
     const dt = this.lastTime < 0 ? 0 : Math.min(0.5, Math.max(0, s.time - this.lastTime));
-    // coffee: fresh mug when a session starts, drains while he studies
+    // coffee: fresh mug when a session starts, drains while they study
     if (s.mode === 'studying' && this.prevMode !== null && this.prevMode !== 'studying' && this.prevMode !== 'paused' && this.prevMode !== 'break') this.coffee = 1;
     if (s.mode === 'studying') this.coffee = Math.max(0, this.coffee - dt / COFFEE_SECONDS);
     this.prevMode = s.mode;
