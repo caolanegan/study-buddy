@@ -125,10 +125,12 @@ export function confirmDialog(title: string, text: string, okLabel = 'OK', dange
   });
 }
 
-export function toast(text: string, icon = '✨', ms = 4200) {
-  const el = h('div', { class: 'toast', role: 'status' }, h('span', { class: 'toast-icon', 'aria-hidden': 'true' }, icon), h('span', null, text));
+/** `key`: a newer toast with the same key replaces the older one. */
+export function toast(text: string, icon = '✨', ms = 4200, key?: string) {
+  if (key) toastRoot.querySelector(`[data-key="${key}"]`)?.remove();
+  const el = h('div', { class: 'toast', role: 'status', 'data-key': key }, h('span', { class: 'toast-icon', 'aria-hidden': 'true' }, icon), h('span', null, text));
   toastRoot.appendChild(el);
-  while (toastRoot.children.length > 4) toastRoot.firstElementChild?.remove();
+  while (toastRoot.children.length > 3) toastRoot.firstElementChild?.remove();
   setTimeout(() => {
     el.classList.add('closing');
     setTimeout(() => el.remove(), 250);

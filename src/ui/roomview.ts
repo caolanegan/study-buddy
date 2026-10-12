@@ -40,6 +40,7 @@ export function createRoomView(ctx: Ctx, sc: SessionController): RoomView {
           ctx.savePrefs();
           renderMode();
           last = '';
+          startBtn.textContent = startLabel();
         },
       },
       label,
@@ -53,6 +54,7 @@ export function createRoomView(ctx: Ctx, sc: SessionController): RoomView {
   };
   renderMode();
 
+  const startLabel = () => (ctx.prefs.pomodoro ? `▶ Start focus · ${ctx.store.get().settings.pomodoroWorkMin} min` : '▶ Start studying');
   const startBtn = h('button', { type: 'button', class: 'btn btn-go btn-big', onclick: () => sc.start() }, '▶ Start studying');
   const pauseBtn = h('button', { type: 'button', class: 'btn btn-primary btn-big', onclick: () => sc.primary() }, '❚❚ Pause');
   const endBtn = h('button', { type: 'button', class: 'btn btn-danger btn-big', onclick: () => sc.end() }, '■ End');
@@ -97,9 +99,7 @@ export function createRoomView(ctx: Ctx, sc: SessionController): RoomView {
         startBtn.hidden = !idle;
         pauseBtn.hidden = idle;
         endBtn.hidden = idle;
-        startBtn.textContent = ctx.prefs.pomodoro
-          ? `▶ Start focus · ${state.settings.pomodoroWorkMin} min`
-          : '▶ Start studying';
+        startBtn.textContent = startLabel();
         pauseBtn.className = 'btn btn-big ' + (v.status === 'running' ? 'btn-primary' : 'btn-go');
         pauseBtn.textContent =
           v.status === 'running' ? '❚❚ Pause' : v.status === 'break' ? '⏭ Skip break' : v.status === 'check' ? '✓ Still here' : '▶ Resume';
@@ -117,6 +117,7 @@ export function createRoomView(ctx: Ctx, sc: SessionController): RoomView {
       setText(ringPct, p >= 1 ? '✓' : `${Math.floor(p * 100)}%`);
       goal.setAttribute('aria-valuenow', String(Math.floor(p * 100)));
       setText(goalToday, `Today: ${formatShort(today)}`);
+      goal.title = p >= 1 ? 'Daily goal reached' : `Daily goal: ${formatShort(state.settings.dailyGoalMin * MIN)}`;
       setText(goalOf, p >= 1 ? `Goal of ${formatShort(state.settings.dailyGoalMin * MIN)} reached 🎉` : `of ${formatShort(state.settings.dailyGoalMin * MIN)} daily goal`);
     },
   };

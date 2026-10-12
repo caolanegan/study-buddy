@@ -340,12 +340,12 @@ export class Outside {
     if (w === 'rain' || w === 'storm')
       spawn(w === 'storm' ? 70 : 40, () => ({ x: WX + Math.random() * (WW + 10), y: WY - 2, vx: w === 'storm' ? -14 : -5, vy: 70 + Math.random() * 20, c: '', ph: 0, kind: 'rain' }));
     if (w === 'snow' || (snowy && w !== 'rain' && w !== 'storm' && w !== 'clear'))
-      spawn(w === 'snow' ? 12 : 4, () => ({ x: WX + Math.random() * WW, y: WY - 2, vx: -1 - Math.random(), vy: 6 + Math.random() * 4, c: '#ffffff', ph: Math.random() * 6, kind: 'snow' }));
+      spawn(w === 'snow' ? 9 : 3, () => ({ x: WX + Math.random() * WW, y: WY - 2, vx: -0.4 - Math.random() * 0.6, vy: 3.5 + Math.random() * 2, c: '#ffffff', ph: Math.random() * 6, kind: 'snow' }));
     if (season === 2) spawn(3, () => ({ x: tx - 10 + Math.random() * 22, y: WY + 16 + Math.random() * 10, vx: -3, vy: 5 + Math.random() * 3, c: ['#e07b39', '#c94f2c', '#f2b134'][(Math.random() * 3) | 0], ph: Math.random() * 6, kind: 'leaf' }));
     if (season === 0 && w !== 'rain' && w !== 'storm')
       spawn(1.5, () => ({ x: tx - 10 + Math.random() * 22, y: WY + 16 + Math.random() * 10, vx: -3, vy: 4 + Math.random() * 3, c: '#f7b5cf', ph: Math.random() * 6, kind: 'petal' }));
     for (const q of this.particles) {
-      const wobble = q.kind === 'rain' ? 0 : Math.sin(s.time * 3 + q.ph) * 3;
+      const wobble = q.kind === 'rain' ? 0 : q.kind === 'snow' ? Math.sin(s.time * 1.6 + q.ph) * 1.6 : Math.sin(s.time * 3 + q.ph) * 3;
       q.x += (q.vx + wobble) * dt;
       q.y += q.vy * dt;
     }

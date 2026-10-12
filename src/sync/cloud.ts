@@ -1,4 +1,4 @@
-import { createClient, type RealtimeChannel, type SupabaseClient } from '@supabase/supabase-js';
+import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
 import type { AppState } from '../core/types';
 import { normalize } from '../core/actions';
 import { mergeStates } from '../core/merge';
@@ -98,6 +98,8 @@ export class CloudSync {
     this.client = null;
     if (!cfg) return this.setStatus('disabled');
     try {
+      // loaded lazily so the app starts fast without sync configured
+      const { createClient } = await import('@supabase/supabase-js');
       this.client = createClient(cfg.url, cfg.anonKey, { auth: { persistSession: true, autoRefreshToken: true } });
     } catch (e) {
       return this.setStatus('error', String(e));

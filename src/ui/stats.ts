@@ -38,17 +38,22 @@ export function createStatsView(ctx: Ctx) {
       h('figcaption', null, h('h3', null, 'Last 7 days'), h('span', { class: 'muted small' }, `${formatShort(total)} total`)),
       h(
         'div',
-        { class: 'bars', role: 'list' },
-        h('div', { class: 'goal-line', style: `bottom:${(goal / max) * 100}%`, title: `Daily goal: ${formatShort(goal)}` }, h('span', null, 'goal')),
-        days.map((d) =>
-          h(
-            'div',
-            { class: `bar-col ${d.isToday ? 'today' : ''}`, role: 'listitem', title: `${d.label}: ${formatShort(d.ms)}`, 'aria-label': `${d.label}: ${formatShort(d.ms)}` },
-            h('div', { class: 'bar-v' }, d.ms >= MIN ? formatShort(d.ms) : ''),
-            h('div', { class: 'bar-track' }, h('div', { class: `bar ${d.ms >= goal ? 'met' : ''}`, style: `height:${Math.max(d.ms ? 2 : 0, (d.ms / max) * 100)}%` })),
-            h('div', { class: 'bar-k' }, d.label),
-          ),
+        { class: 'bars' },
+        h(
+          'div',
+          { class: 'plot', role: 'list' },
+          h('div', { class: 'goal-line', style: `bottom:${(goal / max) * 100}%`, title: `Daily goal: ${formatShort(goal)}` }, h('span', null, 'goal')),
+          days.map((d) => {
+            const pct = (d.ms / max) * 100;
+            return h(
+              'div',
+              { class: `bar-col ${d.isToday ? 'today' : ''}`, role: 'listitem', title: `${d.label}: ${formatShort(d.ms)}`, 'aria-label': `${d.label}: ${formatShort(d.ms)}` },
+              h('div', { class: `bar ${d.ms >= goal ? 'met' : ''}`, style: `height:${d.ms ? Math.max(1.5, pct) : 0}%` }),
+              d.ms >= MIN ? h('div', { class: 'bar-v', style: `bottom:calc(${pct}% + 3px)` }, formatShort(d.ms)) : null,
+            );
+          }),
         ),
+        h('div', { class: 'bar-labels', 'aria-hidden': 'true' }, days.map((d) => h('span', { class: d.isToday ? 'today' : '' }, d.isToday ? 'Today' : d.label))),
       ),
     );
   }

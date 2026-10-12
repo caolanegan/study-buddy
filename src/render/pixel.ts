@@ -61,3 +61,92 @@ export function rng(seed: number) {
   if (s <= 0) s += 2147483646;
   return () => (s = (s * 16807) % 2147483647) / 2147483647;
 }
+
+/**
+ * A small pixel sprite authored as strings ('.' = transparent, other chars looked up in the palette).
+ * Rasterised lazily into an offscreen canvas the first time it's drawn.
+ */
+export class Sprite {
+  private c: HTMLCanvasElement | null = null;
+  readonly w: number;
+  readonly h: number;
+  constructor(
+    private rows: string[],
+    private pal: Record<string, string>,
+  ) {
+    this.h = rows.length;
+    this.w = Math.max(...rows.map((r) => r.length));
+  }
+  get canvas(): HTMLCanvasElement {
+    if (!this.c) {
+      const c = document.createElement('canvas');
+      c.width = this.w;
+      c.height = this.h;
+      const g = c.getContext('2d')!;
+      this.rows.forEach((row, y) => {
+        for (let x = 0; x < row.length; x++) {
+          const col = this.pal[row[x]];
+          if (row[x] === '.' || !col) continue;
+          g.fillStyle = col;
+          g.fillRect(x, y, 1, 1);
+        }
+      });
+      this.c = c;
+    }
+    return this.c;
+  }
+  /** Same pixels with a different palette. */
+  recolor(pal: Record<string, string>) {
+    return new Sprite(this.rows, { ...this.pal, ...pal });
+  }
+}
+
+/** Draws a sprite with its top-left at (x,y); flip mirrors it horizontally. */
+export function drawSprite(p: Painter, s: Sprite, x: number, y: number, flip = false) {
+  const g = p.g;
+  x = Math.round(x);
+  y = Math.round(y);
+  if (!flip) g.drawImage(s.canvas, x, y);
+  else {
+    g.save();
+    g.translate(x + s.w, y);
+    g.scale(-1, 1);
+    g.drawImage(s.canvas, 0, 0);
+    g.restore();
+  }
+}
+
+const glowCache = new Map<string, HTMLCanvasElement>();
+/**
+ * Cheap additive glow: a cached radial-gradient sprite stretched to radius r.
+ * Call with globalCompositeOperation already set to 'lighter'.
+ */
+export function glowSprite(p: Painter, x: number, y: number, r: number, rgb: RGB, alpha: number) {
+  if (alpha <= 0.002) return;
+  const key = rgb.join(',');
+  let c = glowCache.get(key);
+  if (!c) {
+    c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const g = c.getContext('2d')!;
+    const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grd.addColorStop(0, css(rgb, 1));
+    grd.addColorStop(0.4, css(rgb, 0.45));
+    grd.addColorStop(1, css(rgb, 0));
+    g.fillStyle = grd;
+    g.fillRect(0, 0, 64, 64);
+    glowCache.set(key, c);
+  }
+  const g = p.g;
+  const a = g.globalAlpha;
+  g.globalAlpha = Math.min(1, alpha);
+  g.drawImage(c, x - r, y - r, r * 2, r * 2);
+  g.globalAlpha = a;
+}
+
+/** Hue (0..360) → rgb, full saturation, for RGB gear. */
+export function hue(h: number, l = 0.6): string {
+  return `hsl(${((h % 360) + 360) % 360},90%,${Math.round(l * 100)}%)`;
+}
+
+export const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);

@@ -21,7 +21,7 @@ export function createShopView(ctx: Ctx) {
       if (r.error) return toast('Can’t buy that right now', '🚫');
       store.set(r.state);
       audio.play('purchase');
-      toast(`${item.name} is in your room!`, item.icon);
+      toast(`${item.name} is in your room!`, item.icon, 2600, 'shop');
     } else if (action === 'equip') {
       store.set(actions.equip(store.get(), item.id, now));
       audio.play('click');
@@ -54,7 +54,6 @@ export function createShopView(ctx: Ctx) {
             },
           },
           h('span', { 'aria-hidden': 'true' }, c.icon),
-          ' ',
           c.name,
         ),
       ),
@@ -79,6 +78,7 @@ export function createShopView(ctx: Ctx) {
             h('h3', { class: 'item-name' }, item.name, equipped ? h('span', { class: 'tag tag-on' }, 'In room') : owned ? h('span', { class: 'tag' }, 'Owned') : null),
             h('p', { class: 'item-blurb' }, item.blurb),
             shared ? h('p', { class: 'item-slot muted small' }, `Swaps with other ${SLOT_NAMES[slot] ?? slot} items`) : null,
+            b.hint && !owned ? h('p', { class: 'item-hint small' }, b.hint) : null,
           ),
           h(
             'div',
@@ -94,7 +94,6 @@ export function createShopView(ctx: Ctx) {
               },
               b.label,
             ),
-            b.hint && !owned ? h('div', { class: 'item-hint muted small' }, b.hint) : null,
           ),
         );
       }),
