@@ -17,8 +17,8 @@ function studied(state: AppState, start: number, ms: number) {
 
 describe('sim time', () => {
   it('maps study hours to sim days and seasons', () => {
-    expect(simTime(0)).toMatchObject({ day: 1, t: 0, season: 0, clock: '06:00', isNight: false, dayOfSeason: 1, year: 1 });
-    expect(simTime(30 * MIN)).toMatchObject({ day: 1, clock: '18:00', isNight: true });
+    expect(simTime(0)).toMatchObject({ day: 1, season: 0, clock: '07:55', isNight: false, dayOfSeason: 1, year: 1 });
+    expect(simTime(30 * MIN)).toMatchObject({ day: 1, clock: '19:55', isNight: true });
     expect(simTime(1 * HOUR)).toMatchObject({ day: 2, dayOfSeason: 2 });
     expect(simTime(10 * HOUR)).toMatchObject({ season: 1, seasonName: 'Summer', dayOfSeason: 1 });
     expect(simTime(25 * HOUR)).toMatchObject({ seasonName: 'Autumn', dayOfSeason: 6 });

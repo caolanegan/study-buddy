@@ -59,6 +59,10 @@ const TAP_FX: Partial<Record<HitTarget, { sound?: string; float?: string; pet?: 
   clock: { sound: 'tick', float: 'tick!' },
   lamp: { sound: 'click' },
   tv: { sound: 'click' },
+  hamster: { sound: 'pop', pet: true },
+  parrot: { sound: 'chirp', pet: true },
+  'robot-vacuum': { sound: 'boop', float: 'beep!', pet: true },
+  ghost: { sound: 'whoosh', float: '👻' },
 };
 
 export function createBuddy(ctx: Ctx, d: BuddyDeps): Buddy {

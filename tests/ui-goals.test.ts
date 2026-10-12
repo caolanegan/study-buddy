@@ -1,3 +1,4 @@
+import { SIM_START_OFFSET_H } from '../src/core/sim';
 import { describe, expect, it } from 'vitest';
 import * as A from '../src/core/actions';
 import { ACHIEVEMENTS, computeStats } from '../src/core/achievements';
@@ -227,10 +228,12 @@ describe('subjects', () => {
 
 describe('milestones', () => {
   it('celebrates a new sim day, season and year', () => {
-    expect(simMilestone(42 * HOUR + 59 * MIN, 43 * HOUR)).toMatchObject({ kind: 'day', text: 'Day 44 begins', big: false });
-    expect(simMilestone(20 * HOUR - 1000, 20 * HOUR)).toMatchObject({ kind: 'season', icon: '🍂', text: 'Autumn has arrived! · 20 hours studied', big: true });
-    expect(simMilestone(40 * HOUR - 1000, 40 * HOUR)).toMatchObject({ kind: 'year', icon: '🎆', big: true });
-    expect(simMilestone(40 * HOUR - 1000, 40 * HOUR)!.text).toMatch(/^Year 2!/);
+    // sim days are phase-shifted so day 1 starts mid-morning
+    const at = (h: number) => (h - SIM_START_OFFSET_H) * HOUR;
+    expect(simMilestone(at(43) - MIN, at(43))).toMatchObject({ kind: 'day', text: 'Day 44 begins', big: false });
+    expect(simMilestone(at(20) - 1000, at(20))).toMatchObject({ kind: 'season', icon: '🍂', text: 'Autumn has arrived! · 20 hours studied', big: true });
+    expect(simMilestone(at(40) - 1000, at(40))).toMatchObject({ kind: 'year', icon: '🎆', big: true });
+    expect(simMilestone(at(40) - 1000, at(40))!.text).toMatch(/^Year 2!/);
     expect(simMilestone(5 * HOUR + 10, 5 * HOUR + 20)).toBeNull();
     // jumps (sync / import) aren't live transitions
     expect(simMilestone(5 * HOUR, 8 * HOUR)).toBeNull();

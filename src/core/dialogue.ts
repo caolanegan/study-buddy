@@ -139,10 +139,12 @@ const EVENT: Line[] = [
   (c) => (c.event === 'train' ? 'There goes the train.' : null),
 ];
 const PET: Line[] = [
-  (c) => (c.pet === 'cat' ? 'She loves you. Probably. 🐱' : null),
+  (c) => (c.pet === 'cat' ? 'The cat loves you. Probably. 🐱' : null),
   (c) => (c.pet === 'dog' ? 'Who’s a good study buddy? 🐶' : null),
   (c) => (c.pet === 'fish-tank' ? 'The fish say blub.' : null),
   (c) => (c.pet === 'hamster' ? 'Wheel go brrr 🐹' : null),
+  (c) => (c.pet === 'robot-vacuum' ? 'Beep boop. Floor: 12% cleaner.' : null),
+  (c) => (c.pet === 'ghost' ? 'Don’t worry, they’re friendly 👻' : null),
   (c) => (c.pet === 'parrot' ? '“Study hard! Squawk!”' : null),
   (c) => (c.pet === 'lizard' ? 'He’s basking. Living his best life.' : null),
 ];

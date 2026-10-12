@@ -301,7 +301,7 @@ export function simMilestone(prevMs: number, ms: number): Milestone | null {
   const a = simTime(prevMs);
   const b = simTime(ms);
   if (b.day !== a.day + 1) return null;
-  const hours = Math.floor(ms / HOUR);
+  const hours = Math.round(ms / HOUR);
   if (b.year !== a.year) return { kind: 'year', icon: '🎆', text: `Year ${b.year}! ${hours} hours studied — happy new year in the room`, big: true };
   if (b.season !== a.season) return { kind: 'season', icon: SEASON_ICON[b.seasonName], text: `${b.seasonName} has arrived! · ${hours} hours studied`, big: true };
   return { kind: 'day', icon: '☀️', text: `Day ${b.day} begins`, big: false };

@@ -21,8 +21,11 @@ export interface SimTime {
   isNight: boolean;
 }
 
+/** The very first sim day starts mid-morning (~08:00) rather than at dawn, so new rooms start bright. */
+export const SIM_START_OFFSET_H = 0.08;
+
 export function simTime(totalStudiedMs: number): SimTime {
-  const hours = Math.max(0, totalStudiedMs) / HOUR;
+  const hours = Math.max(0, totalStudiedMs) / HOUR + SIM_START_OFFSET_H;
   const dayIndex = Math.floor(hours);
   const t = hours - dayIndex;
   const season = (Math.floor(dayIndex / SEASON_DAYS) % 4) as 0 | 1 | 2 | 3;
