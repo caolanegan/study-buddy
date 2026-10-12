@@ -7,6 +7,7 @@ import { modalOpen } from './overlay';
 import { weatherIcon } from './format';
 import { deriveSession } from './viewmodel';
 import type { SessionController } from './session';
+import { WIN } from '../render/scene';
 
 const HIDE_AFTER = 3000;
 
@@ -39,7 +40,20 @@ export function createZen(stage: HTMLElement, sc: SessionController, refresh?: (
     h('div', { class: 'zen-bottom' }, h('div', { class: 'zen-clock' }, timer, sub), h('div', { class: 'zen-btns' }, start, primary, end)),
   );
   const slot = h('div', { class: 'zen-slot' });
-  root.append(slot, hud);
+  // Tall phone screens: a big live view out of the window above the room (a crop of the room canvas).
+  const winCanvas = h('canvas', { class: 'zen-window', width: WIN.w, height: WIN.h, 'aria-hidden': 'true' }) as HTMLCanvasElement;
+  const winWrap = h('div', { class: 'zen-window-wrap', 'aria-hidden': 'true' }, winCanvas);
+  root.append(winWrap, slot, hud);
+  const winCtx = winCanvas.getContext('2d');
+  let winRaf = 0;
+  const copyWindow = () => {
+    winRaf = requestAnimationFrame(copyWindow);
+    if (!winCtx || winWrap.offsetParent === null) return; // hidden on this screen shape
+    const src = stage.querySelector('canvas');
+    if (!src) return;
+    winCtx.imageSmoothingEnabled = false;
+    winCtx.drawImage(src, WIN.x, WIN.y, WIN.w, WIN.h, 0, 0, WIN.w, WIN.h);
+  };
 
   let on = false;
   let placeholder: Comment | null = null;
@@ -78,10 +92,13 @@ export function createZen(stage: HTMLElement, sc: SessionController, refresh?: (
       lastKey = '';
       wake();
       refresh?.();
+      cancelAnimationFrame(winRaf);
+      copyWindow();
       if (canFullscreen()) document.documentElement.requestFullscreen().catch(() => {});
       requestAnimationFrame(() => root.focus({ preventScroll: true }));
     } else {
       clearTimeout(hideTimer);
+      cancelAnimationFrame(winRaf);
       wentFull = false;
       if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
       placeholder?.replaceWith(stage);
