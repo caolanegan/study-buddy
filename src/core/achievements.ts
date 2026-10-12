@@ -11,6 +11,11 @@ export interface Stats {
   nightOwl: boolean; // studied between 00:00 and 04:00
   earlyBird: boolean; // started between 04:00 and 07:00
   dailyMaxMs: number;
+  starsCaught: number;
+  lettersOpened: number;
+  questsDone: number;
+  friends: number;
+  subjects: number;
 }
 
 export interface Achievement {
@@ -43,6 +48,12 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'pomodoro-50', name: 'Tomato Tycoon', icon: '🥫', desc: 'Complete 50 pomodoros', reward: 400, test: (s) => s.pomodoros >= 50 },
   { id: 'night-owl', name: 'Night Owl', icon: '🌙', desc: 'Study between midnight and 4am', reward: 50, test: (s) => s.nightOwl },
   { id: 'early-bird', name: 'Early Bird', icon: '🐦', desc: 'Start a session between 4am and 7am', reward: 50, test: (s) => s.earlyBird },
+  { id: 'star-catcher', name: 'Star Catcher', icon: '🌠', desc: 'Catch 3 things from the window (stars, birds, balloons…)', reward: 100, test: (s) => s.starsCaught >= 3 },
+  { id: 'pen-pal', name: 'Pen Pal', icon: '✉️', desc: 'Open 7 daily letters', reward: 100, test: (s) => s.lettersOpened >= 7 },
+  { id: 'quest-10', name: 'Adventurer', icon: '🗺️', desc: 'Complete 10 quests', reward: 150, test: (s) => s.questsDone >= 10 },
+  { id: 'quest-50', name: 'Hero of the Desk', icon: '🛡️', desc: 'Complete 50 quests', reward: 500, test: (s) => s.questsDone >= 50 },
+  { id: 'study-pal', name: 'Study Pals', icon: '🤝', desc: 'Add a friend on the leaderboard', reward: 75, test: (s) => s.friends >= 1 },
+  { id: 'polymath', name: 'Polymath', icon: '🧠', desc: 'Log sessions for 3 different subjects', reward: 100, test: (s) => s.subjects >= 3 },
   { id: 'first-purchase', name: 'Interior Designer', icon: '🛍️', desc: 'Buy your first upgrade', reward: 25, test: (s) => s.purchases >= 1 },
   { id: 'collector', name: 'Collector', icon: '🧺', desc: 'Own 10 upgrades', reward: 300, test: (s) => s.purchases >= 10 },
 ];
@@ -71,5 +82,10 @@ export function computeStats(state: AppState, bestStreak: number): Stats {
     nightOwl,
     earlyBird,
     dailyMaxMs: Object.values(daily).reduce((a, v) => Math.max(a, v), 0),
+    starsCaught: (state.bonuses ?? []).filter((b) => b.kind === 'catch').length,
+    lettersOpened: (state.bonuses ?? []).filter((b) => b.kind === 'letter').length,
+    questsDone: (state.bonuses ?? []).filter((b) => b.kind === 'quest').length,
+    friends: (state.friends ?? []).length,
+    subjects: new Set(state.sessions.map((x) => x.subject?.trim().toLowerCase()).filter(Boolean)).size,
   };
 }

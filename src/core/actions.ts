@@ -250,3 +250,11 @@ export function removeFriend(state: AppState, code: string, now: number): AppSta
 
 // re-exported for convenience
 export { balance };
+
+/** Coins for tapping a catchable world event. */
+export const CATCH_REWARDS: Record<string, number> = { 'shooting-star': 15, 'bird-visit': 5, balloon: 10, ufo: 50 };
+
+export function claimCatch(state: AppState, kind: string, now: number) {
+  const reward = CATCH_REWARDS[kind] ?? 5;
+  return claimBonus(state, { id: `catch:${kind}:${now}:${uid().slice(-4)}`, kind: 'catch', reward, label: kind }, now);
+}

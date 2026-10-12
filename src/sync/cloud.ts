@@ -78,6 +78,11 @@ export class CloudSync {
     }
   }
 
+  /** Supabase client + signed-in user (for the leaderboard), or null when signed out. */
+  get session(): { client: SupabaseClient; userId: string } | null {
+    return this.client && this.userId ? { client: this.client, userId: this.userId } : null;
+  }
+
   onChange(fn: () => void): () => void {
     this.listeners.add(fn);
     return () => this.listeners.delete(fn);
