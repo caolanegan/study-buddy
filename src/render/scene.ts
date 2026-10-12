@@ -37,6 +37,11 @@ export type HitTarget =
   | 'window'
   | 'lamp'
   | 'tv'
+  | 'hamster'
+  | 'parrot'
+  | 'robot-vacuum'
+  /** the friendly ghost plush (item 'ghost-plush') */
+  | 'ghost'
   /** a catchable thing outside (shooting star, balloon, bird on the sill…) */
   | 'world-event';
 

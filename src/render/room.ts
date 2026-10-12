@@ -15,7 +15,7 @@ import {
   type CharReact,
   type ReactionKind,
 } from './character';
-import { ITEM_ART, ITEM_LIST, type ArtCtx, type Layer } from './items';
+import { ITEM_ART, ITEM_LIST, movingItemSpot, type ArtCtx, type Layer } from './items';
 import type { HitTarget, WorldEventKind } from './scene';
 import { WIN, FLOOR_Y, DESK, CABINET, STAND_LIFT, TV, mainMonitor, type RenderEvents, type RenderScene } from './scene';
 import { wallOf, floorOf, curtainOf, type WallId, type FloorId, type CurtainId } from '../core/profile';
@@ -129,6 +129,8 @@ export class RoomRenderer {
   /** Animation time each pet (or thing) was last tapped. */
   private petTap: Record<string, number> = {};
   private hearts: { x: number; y: number; start: number; n: number }[] = [];
+  private beep = { x: 0, y: 0, start: -1e9 };
+  private lastNight = 0;
   private plantTap = -1e9;
   private clockTap = -1e9;
   private tvTap = -1e9;
@@ -188,6 +190,10 @@ export class RoomRenderer {
       /* outside not ready */
     }
     const it = s.items;
+    if (it.has('ghost-plush')) {
+      const g = movingItemSpot('ghost-plush', s, this.lastNight);
+      if (g && x >= g.x - 6 && x <= g.x + 6 && y >= g.y - 15 && y <= g.y + 2) return 'ghost';
+    }
     for (const id of MOVING_PETS) if (it.has(id) && this.itemHit(id, x, y, 3)) return id as HitTarget;
     const lift = Math.round(this.lift);
     const inBox = (b: { x: number; y: number; w: number; h: number }, pad = 0) => x >= b.x - pad && x < b.x + b.w + pad && y >= b.y - pad && y < b.y + b.h + pad;
@@ -246,16 +252,16 @@ export class RoomRenderer {
         break;
       }
       default: {
-        // pets
-        this.petTap[target] = time;
+        // pets (keyed by item id for the art's tap hooks)
+        this.petTap[target === 'ghost' ? 'ghost-plush' : target] = time;
         if (target === 'cat' || target === 'dog') this.events.onPet?.(target);
-        if (target !== 'fish-tank') {
-          const a = s ? this.anchor(target) : null;
-          if (a) {
-            if (this.hearts.length > 6) this.hearts.shift();
-            this.hearts.push({ x: a.x, y: a.y, start: time, n: target === 'lizard' ? 1 : 3 });
-          }
+        const hearts = target === 'lizard' ? 1 : target === 'hamster' ? 2 : target === 'cat' || target === 'dog' ? 3 : 0;
+        const a = s && (hearts || target === 'robot-vacuum') ? this.anchor(target) : null;
+        if (a && hearts) {
+          if (this.hearts.length > 6) this.hearts.shift();
+          this.hearts.push({ x: a.x, y: a.y, start: time, n: hearts });
         }
+        if (a && target === 'robot-vacuum') this.beep = { x: a.x, y: a.y, start: time };
       }
     }
   }
@@ -313,6 +319,10 @@ export class RoomRenderer {
           /* ignore */
         }
         return { ...this.lastTap };
+      }
+      case 'ghost': {
+        const g = it.has('ghost-plush') ? movingItemSpot('ghost-plush', s, this.lastNight) : null;
+        return g ? { x: g.x, y: g.y - 15 } : null;
       }
       default: {
         if (!it.has(target)) return null;
@@ -448,6 +458,7 @@ export class RoomRenderer {
       petTap: this.petTap,
     };
     this.last = s;
+    this.lastNight = night;
     this.lastAct = act;
     this.lastPose = pose;
     this.lastCtx = ctx;
@@ -736,6 +747,12 @@ export class RoomRenderer {
         const y = Math.round(h.y - 6 - kk * 10);
         drawHeart(p, x, y, a);
       }
+    }
+    // robot vacuum: happy beeps
+    const bk = t - this.beep.start;
+    if (bk >= 0 && bk < 1.6 && Math.floor(bk * 5) % 2 === 0) {
+      const { x, y } = this.beep;
+      for (const [dx, dy] of [[-4, -1], [-3, -3], [0, -4], [3, -3], [4, -1]]) p.px(x + dx, y + dy - Math.floor(bk * 3), '#5fd0ff');
     }
     // fish tank: a burst of bubbles
     const fk = t - (this.petTap['fish-tank'] ?? -1e9);

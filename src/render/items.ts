@@ -44,6 +44,10 @@ const ease = (k: number) => k * k * (3 - 2 * k);
 const crossed = (ctx: ArtCtx, now: number, period: number, at: number) =>
   now > ctx.prevTime && Math.floor((now - at) / period) > Math.floor((ctx.prevTime - at) / period);
 
+/** Seconds since `id` was tapped (room interaction), or a large negative number. */
+const tapAge = (petTap: Record<string, number> | undefined, id: string, t: number) => t - (petTap?.[id] ?? -1e9);
+const tapped = (k: number, len: number) => k >= 0 && k < len;
+
 /** Quantised hue → rgb (for cached glow sprites). */
 const HUE_RGB: RGB[] = Array.from({ length: 12 }, (_, i) => {
   const h = i / 12;
@@ -1689,13 +1693,16 @@ function parrotState(s: RenderScene, night: number) {
 const parrot: ItemArt[] = [
   {
     layer: 'behind-char',
-    draw(p, s, { night, mode }) {
+    draw(p, s, { night, mode, petTap }) {
       const t = s.time;
       const { x0, x1, y, post } = PERCH;
       // T-perch standing on the sill
       p.rect(post - 3, 74, 7, 1, '#5a3a20');
       p.rect(post, y + 2, 1, 72 - y, '#8a5a35');
-      const st = parrotState(s, night);
+      const st0 = parrotState(s, night);
+      // tapped: flaps, then sings
+      const pk = tapAge(petTap, 'parrot', t);
+      const st = tapped(pk, 3.5) ? { ...st0, act: pk < 1.2 ? ('flap' as const) : ('sing' as const), lift: pk < 1.2 ? Math.floor(t * 8) % 2 : 0 } : st0;
       const px = Math.round(st.x);
       const fy = y - 1 - Math.round(st.lift); // feet row
       const left = px - 3;
@@ -1729,8 +1736,13 @@ const parrot: ItemArt[] = [
   },
   {
     layer: 'top',
-    draw(p, s, { night }) {
+    draw(p, s, { night, petTap }) {
       const st = parrotState(s, night);
+      const pk = tapAge(petTap, 'parrot', s.time);
+      if (tapped(pk, 3.5)) {
+        if (pk > 1.2) floatNotes(p, pk - 1.2, Math.round(st.x) + (st.right ? 4 : -6), PERCH.y - 12, 3, 1.4, 10, ['#5fbf77', '#f2b134', '#82aaff']);
+        return;
+      }
       if (st.act !== 'sing') return;
       const c = s.time % PAR_T;
       const t0 = c < 15 ? c - 9.2 : c - 31.2;
@@ -2188,15 +2200,29 @@ const ghostPlush: ItemArt[] = [
   {
     // peeking over the back of the sofa (the sofa, drawn later, hides its lower half)
     layer: 'behind-char',
-    draw(p, s) {
+    draw(p, s, { petTap }) {
       const g = ghostState(s);
-      if (g.hide) drawGhost(p, s, g.x, g.y, g.look, g.boo, 0.85);
+      if (g.hide && !tapped(tapAge(petTap, 'ghost-plush', s.time), 2.4)) drawGhost(p, s, g.x, g.y, g.look, g.boo, 0.85);
     },
   },
   {
     layer: 'top',
-    draw(p, s, { night }) {
+    draw(p, s, { night, petTap }) {
       const g = ghostState(s);
+      const gk = tapAge(petTap, 'ghost-plush', s.time);
+      if (tapped(gk, 2.4)) {
+        // tapped: "boo!", then it fades away for a moment
+        const a = gk < 1 ? 0.85 : Math.max(0, 0.85 * (1 - (gk - 1) / 1.2));
+        drawGhost(p, s, g.x, g.y - Math.min(4, gk * 6), false, gk < 1.2, a);
+        if (gk < 1.4) {
+          const bx = Math.round(g.x) - 5;
+          const by = Math.round(g.y) - 22;
+          glyph(p, BOO_FONT.b, bx, by, '#c9b8ff');
+          glyph(p, BOO_FONT.o, bx + 4, by, '#c9b8ff');
+          glyph(p, BOO_FONT.o, bx + 8, by, '#c9b8ff');
+        }
+        return;
+      }
       if (!g.hide) {
         if (night > 0.05) additive(p, () => glowSprite(p, g.x, g.y - 5, 12, [190, 200, 255], 0.22 * night));
         drawGhost(p, s, g.x, g.y, g.look, false, 0.72);
@@ -2228,8 +2254,9 @@ const HAM_T = 40;
 const hamster: ItemArt[] = [
   {
     layer: 'behind-char',
-    draw(p, s, { lift }) {
+    draw(p, s, { lift, petTap }) {
       const t = s.time;
+      const zoom = tapped(tapAge(petTap, 'hamster', t), 3); // tapped: sprints in the wheel
       const { x, w, h } = CAGE;
       const y = DESK.top - lift - h;
       const c = t % HAM_T;
@@ -2250,8 +2277,8 @@ const hamster: ItemArt[] = [
       // wheel: spins while running, coasts otherwise
       const wx = x + 14;
       const wy = y + 6;
-      const running = c < 12;
-      const ang = running ? t * 8 : 12 * 8 + Math.min(c - 12, 2) * 1.5;
+      const running = c < 12 || zoom;
+      const ang = zoom ? t * 22 : running ? t * 8 : 12 * 8 + Math.min(c - 12, 2) * 1.5;
       p.line(wx, wy, wx - 2, floor, '#9a94a3');
       p.line(wx, wy, wx + 2, floor, '#9a94a3');
       for (let b = 0; b < 2; b++) {
@@ -2265,7 +2292,7 @@ const hamster: ItemArt[] = [
       const B = { x: x + 10, y: floor - 4 };
       const N = { x: x + 3, y: floor - 6 };
       const walk = (a: Pt, b: Pt, k: number, left: boolean) => drawSprite(p, HAM[Math.floor(t * 10) % 2], Math.round(lerp(a.x, b.x, k)), Math.round(lerp(a.y, b.y, k)), left);
-      if (running) drawSprite(p, HAM[Math.floor(t * 14) % 3], W.x, W.y);
+      if (running) drawSprite(p, HAM[Math.floor(t * (zoom ? 30 : 14)) % 3], W.x, W.y);
       else if (c < 14) walk(W, B, (c - 12) / 2, true);
       else if (c < 20) drawSprite(p, HAM_EAT[Math.floor(t * 5) % 2], B.x - 1, B.y, true);
       else if (c < 22) walk(B, N, (c - 20) / 2, true);
@@ -2376,7 +2403,10 @@ const robotVacuum: ItemArt[] = [
       const c = t % CAT_T;
       const v = vacState(c);
       const led = vacDocked(c) ? '#5fbf77' : v.moving ? '#5fd0ff' : '#9fc3d6';
-      drawVacuum(p, v.x, v.y, v.dir, t, v.moving, led);
+      // tapped: a happy spin with a blinking light
+      const spin = tapped(tapAge(ctx.petTap, 'robot-vacuum', t), 1.8);
+      if (spin) drawVacuum(p, v.x, v.y, Math.floor(t * 10) % 2 ? 1 : -1, t, true, Math.floor(t * 8) % 2 ? '#f2b134' : '#5fd0ff');
+      else drawVacuum(p, v.x, v.y, v.dir, t, v.moving, led);
       if (v.bump > 0) {
         // little bonk lines
         const bx = Math.round(v.x) + v.dir * 8;

@@ -2,6 +2,7 @@ import { Painter, mixHex, hash01 } from './pixel';
 import type { RenderScene } from './scene';
 import { SOFA, BEANBAG, TV, STAND_LIFT } from './scene';
 import { skinOf, hairColorOf, topColorOf, type HairStyle } from '../core/profile';
+import { LIMITED_HATS, drawLimitedHat, drawLimitedFace } from './items';
 
 export type Pose =
   | 'typing'
@@ -504,12 +505,14 @@ export function headTop(s: RenderScene): number {
   const it = s.items;
   const lift = FIT[style].crown;
   let hatTop = 0;
-  if (it.has('wizard-hat')) hatTop = 18 + (style === 'afro' ? lift : 0);
-  else if (it.has('beanie')) hatTop = 14;
+  if (it.has('wizard-hat') || it.has('witch-hat')) hatTop = 18 + (style === 'afro' ? lift : 0);
+  else if (it.has('bunny-ears')) hatTop = 19 + lift;
+  else if (it.has('beanie') || it.has('santa-hat')) hatTop = 14;
   else if (it.has('crown')) hatTop = 11 + lift;
   else if (it.has('cap')) hatTop = 11;
-  if (it.has('headphones')) hatTop = Math.max(hatTop, 11 + (it.has('beanie') ? 4 : FIT[style].band));
-  return Math.max(hatTop, it.has('beanie') || it.has('cap') ? 0 : hairTop);
+  const pressed = it.has('beanie') || it.has('cap') || it.has('santa-hat') || ((it.has('wizard-hat') || it.has('witch-hat')) && style !== 'afro');
+  if (it.has('headphones')) hatTop = Math.max(hatTop, 11 + (it.has('beanie') || it.has('santa-hat') ? 4 : FIT[style].band));
+  return Math.max(hatTop, pressed ? 0 : hairTop);
 }
 
 /** 'hat' = beanie/cap/wizard hat pressing the hair down; 'crown' = something sitting on top of the hair. */
@@ -820,8 +823,9 @@ export function drawHead(p: Painter, s: RenderScene, hx: number, hy: number, loo
   const it = s.items;
   const style: HairStyle = HAIR_STYLE_IDS.includes(s.look?.hair as HairStyle) ? (s.look.hair as HairStyle) : 'short';
   const fit = FIT[style];
-  const hat = ['beanie', 'cap', 'wizard-hat', 'crown'].find((h) => it.has(h));
-  const cover: Cover = !hat ? 'none' : hat === 'crown' || (hat === 'wizard-hat' && style === 'afro') ? 'crown' : 'hat';
+  const hat = HATS.find((h) => it.has(h));
+  const pointy = hat === 'wizard-hat' || hat === 'witch-hat';
+  const cover: Cover = !hat ? 'none' : hat === 'crown' || hat === 'bunny-ears' || (pointy && style === 'afro') ? 'crown' : 'hat';
   const lift = cover === 'crown' ? fit.crown : 0;
   const phones = it.has('headphones');
 
@@ -858,11 +862,17 @@ export function drawHead(p: Painter, s: RenderScene, hx: number, hy: number, loo
     p.px(hx - 10 - wide, hy, '#9fc3d6');
     p.px(hx + 10 + wide, hy, '#9fc3d6');
   }
-  if (phones && (hat === 'crown' || !hat)) drawBand(p, hx, hy, fit.band, wide);
-  if (phones && hat === 'wizard-hat' && cover === 'crown') drawBand(p, hx, hy, fit.band, wide);
-  if (hat) drawHat(p, hat, hx, hy - (hat === 'wizard-hat' || hat === 'crown' ? lift : 0), cover === 'hat' && style === 'buzz' ? P.fuzz : P.H);
+  if (it.has('sunglasses')) drawLimitedFace(p, 'sunglasses', hx, hy, wide);
+  // headphone band under crowns / bunny ears / pointy hats sitting on an afro; over beanies, santa hats and caps
+  if (phones && (!hat || cover === 'crown')) drawBand(p, hx, hy, fit.band, wide);
+  if (hat) {
+    const hair = cover === 'hat' && style === 'buzz' ? P.fuzz : P.H;
+    const hy2 = hy - (cover === 'crown' ? lift : 0);
+    if ((LIMITED_HATS as readonly string[]).includes(hat)) drawLimitedHat(p, hat, hx, hy2, s.time, hair);
+    else drawHat(p, hat, hx, hy2, hair);
+  }
   if (phones) {
-    if (hat === 'beanie') drawBand(p, hx, hy, 4, cover === 'hat' && style === 'afro' ? 2 : 0);
+    if (hat === 'beanie' || hat === 'santa-hat') drawBand(p, hx, hy, 4, cover === 'hat' && style === 'afro' ? 2 : 0);
     if (hat === 'cap') drawBand(p, hx, hy, 2, cover === 'hat' && style === 'afro' ? 2 : 0);
     // ear cups
     const cw = cover === 'hat' && style === 'afro' ? 2 : wide;
@@ -880,6 +890,8 @@ export function drawHead(p: Painter, s: RenderScene, hx: number, hy: number, loo
     p.px(hx + 1, hy - 11, '#d9cfc0');
   }
 }
+
+const HATS: string[] = ['beanie', 'cap', 'wizard-hat', 'crown', ...LIMITED_HATS];
 
 /** Headphone band arching over the head; `extra` lifts it over a hat / big hair, `wide` widens it. */
 function drawBand(p: Painter, hx: number, hy: number, extra: number, wide = 0) {
