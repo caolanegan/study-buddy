@@ -8,6 +8,11 @@ their room.
 Runs in any modern browser and installs as an app on iPhone, iPad and Mac
 (Safari → Share → **Add to Home Screen** / **Add to Dock**). Works offline.
 
+- **App:** <https://caolanegan.github.io/study-buddy/>
+- **Playground** (try every view, item, character, weather and event without
+  touching your progress): <https://caolanegan.github.io/study-buddy/playground.html>
+- **What's new:** <https://caolanegan.github.io/study-buddy/whats-new/>
+
 ## How it works
 
 | Real world | In the room |
@@ -71,7 +76,7 @@ The sim clock only moves while you're studying.
 
 ```bash
 npm install
-npm run dev        # app at http://localhost:5173, room lab at /lab.html
+npm run dev        # app at http://localhost:5173 (also /playground.html and the dev-only /lab.html)
 npm test           # unit tests
 npm run build      # production build in dist/
 ```
