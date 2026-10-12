@@ -22,7 +22,8 @@ function canFullscreen(): boolean {
   return !iPhone && !!document.fullscreenEnabled && typeof document.documentElement.requestFullscreen === 'function';
 }
 
-export function createZen(stage: HTMLElement, sc: SessionController): Zen {
+/** `refresh` is asked to call update() right away when zen opens, so the HUD never shows unfilled for a beat. */
+export function createZen(stage: HTMLElement, sc: SessionController, refresh?: () => void): Zen {
   const root = h('div', { class: 'zen-root', role: 'region', 'aria-label': 'Zen mode — press Esc to exit', tabindex: -1 });
   const timer = h('div', { class: 'zen-timer', role: 'timer', 'aria-label': 'Study time this session' });
   const sub = h('div', { class: 'zen-sub' });
@@ -76,6 +77,7 @@ export function createZen(stage: HTMLElement, sc: SessionController): Zen {
       document.documentElement.classList.add('zen-on');
       lastKey = '';
       wake();
+      refresh?.();
       if (canFullscreen()) document.documentElement.requestFullscreen().catch(() => {});
       requestAnimationFrame(() => root.focus({ preventScroll: true }));
     } else {

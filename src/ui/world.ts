@@ -117,7 +117,12 @@ export function createWorld(ctx: Ctx, d: { room: RoomView; renderer: RoomRendere
   const zenBtn = h('button', { type: 'button', class: 'stage-btn', 'aria-label': 'Zen mode (F)', title: 'Zen mode (F)', onclick: () => zen.toggle() }, h('span', { class: 'zen-ico', 'aria-hidden': 'true' }));
   const stageBtns = h('div', { class: 'stage-btns' }, editBtn, zenBtn);
   overlay.append(stageBtns);
-  const zen = createZen(stage, sc);
+  const zen = createZen(stage, sc, () => {
+    const s = store.get();
+    const now = ctx.now();
+    const { sim, weather } = clock(s, now);
+    zen.update(s, now, sim, weather, !!visit.snapshot);
+  });
 
   // services for the other views (Settings, Friends)
   ctx.openCustomize = (tab) => customize(tab);

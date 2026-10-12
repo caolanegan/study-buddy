@@ -32,10 +32,17 @@ export class Store {
   }
 
   private load(): AppState {
+    let raw: string | null | undefined = null;
     try {
-      const raw = this.storage?.getItem(STORAGE_KEY);
+      raw = this.storage?.getItem(STORAGE_KEY);
       return normalize(raw ? JSON.parse(raw) : null);
     } catch {
+      // Unreadable save: keep a copy before the next write replaces it, so it can still be recovered.
+      try {
+        if (raw) this.storage?.setItem(`${STORAGE_KEY}:unreadable`, raw);
+      } catch {
+        /* storage full */
+      }
       return normalize(null);
     }
   }

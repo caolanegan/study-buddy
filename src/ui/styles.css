@@ -606,6 +606,18 @@ input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; bor
   .goal { margin-top: 10px; padding-top: 10px; }
 }
 
+/* phones held sideways: room and timer side by side, so Start is on screen without scrolling */
+@media (orientation: landscape) and (max-height: 500px) and (max-width: 899px) {
+  .app { max-width: none; }
+  .app[data-tab="room"] .col-left { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(240px, 1fr); gap: 12px; align-items: start; }
+  .app[data-tab="room"] .col-left > :not(.stage, .session) { grid-column: 1 / -1; }
+  .app[data-tab="room"] .session { margin-top: 0; padding: 12px; }
+  .app[data-tab="room"] .timer { font-size: 40px; }
+  .app[data-tab="room"] .btn-big { min-height: 48px; font-size: 17px; }
+  .app[data-tab="room"] .segmented .seg { white-space: nowrap; font-size: 14px; padding-inline: 12px; }
+  .app[data-tab="shop"] .stage { max-width: calc((100dvh - 150px) * 1.6); margin-inline: auto; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
