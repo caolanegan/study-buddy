@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Study Buddy Preview</title>
+<style>
+  :root {
+    --bg: #1d1b26; --panel: #2a2736; --panel2: #34303f; --ink: #f3ead8; --muted: #a79fb5;
+    --accent: #f2b134; --go: #5fbf77; --warn: #e0864a; --stop: #d9534f; --line: #463f55;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font-family: ui-rounded, "SF Pro Rounded", -apple-system, system-ui, sans-serif; }
+  .app { max-width: 860px; margin: 0 auto; padding: 16px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+  h1 { font-size: 20px; margin: 0; letter-spacing: .5px; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip { background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; font-size: 14px; font-variant-numeric: tabular-nums; }
+  .chip b { color: var(--accent); }
+  .stage { background: #000; border-radius: 14px; overflow: hidden; border: 3px solid var(--line); position: relative; }
+  canvas { display: block; width: 100%; image-rendering: pixelated; image-rendering: crisp-edges; }
+  .simbar { position: absolute; left: 8px; top: 8px; background: rgba(20,18,28,.7); padding: 4px 10px; border-radius: 8px; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .session { background: var(--panel); border-radius: 14px; margin-top: 12px; padding: 16px; text-align: center; border: 1px solid var(--line); }
+  .timer { font-size: 54px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: 2px; }
+  .sub { color: var(--muted); font-size: 14px; margin-bottom: 12px; }
+  .btns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  button { font: inherit; border: 0; border-radius: 12px; padding: 14px 26px; font-size: 18px; font-weight: 700; cursor: pointer; color: #1d1b26; }
+  .start { background: var(--go); min-width: 220px; }
+  .pause { background: var(--accent); }
+  .end { background: var(--stop); color: #fff; }
+  .hidden { display: none; }
+  .preview { margin-top: 16px; background: var(--panel2); border-radius: 14px; padding: 14px; border: 1px dashed var(--muted); }
+  .preview h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin: 0 0 10px; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; font-size: 14px; }
+  .row button { padding: 6px 12px; font-size: 14px; background: var(--panel); color: var(--ink); border: 1px solid var(--line); }
+  .row button.on { background: var(--accent); color: #1d1b26; }
+  input[type=range] { flex: 1; min-width: 160px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>📚 Study Buddy</h1>
+    <div class="chips">
+      <span class="chip">⏱ <b>42.5h</b> total</span>
+      <span class="chip">🪙 <b>1,240</b></span>
+      <span class="chip">🔥 <b>5-day</b> streak ×1.5</span>
+    </div>
+  </header>
+
+  <div class="stage">
+    <canvas id="room"></canvas>
+    <div class="simbar" id="simbar">Day 43 · Autumn · 08:00</div>
+  </div>
+
+  <div class="session">
+    <div class="timer" id="timer">00:00:00</div>
+    <div class="sub" id="sub">Ready when you are</div>
+    <div class="btns">
+      <button class="start" id="startBtn">▶ Start studying</button>
+      <button class="pause hidden" id="pauseBtn">❚❚ Pause</button>
+      <button class="end hidden" id="endBtn">■ End session</button>
+    </div>
+  </div>
+
+  <div class="preview">
+    <h2>Preview controls (not part of the real app)</h2>
+    <div class="row">Time of day <input type="range" id="tod" min="0" max="1000" value="80"> <span id="todLbl"></span></div>
+    <div class="row">Season
+      <button data-s="0">Spring</button><button data-s="1">Summer</button><button data-s="2" class="on">Autumn</button><button data-s="3">Winter</button>
+    </div>
+    <div class="row">
+      <button id="ffBtn">⏩ Fast-forward day/night</button>
+      <button id="upBtn">✨ Show sample upgrades</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const W = 240, H = 150;
+const cv = document.getElementById('room');
+cv.width = W; cv.height = H;
+const main = cv.getContext('2d');
+const off = document.createElement('canvas'); off.width = W; off.height = H;
+const offG = off.getContext('2d');
+let g = main;
+
+const state = { t: 0.08, season: 2, ff: false, upgrades: false, studying: false, paused: false, elapsed: 0 };
+
+// ---------- helpers ----------
+function R(x, y, w, h, c) { g.fillStyle = c; g.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); }
+function P(x, y, c) { R(x, y, 1, 1, c); }
+function disc(cx, cy, r, c) {
+  g.fillStyle = c;
+  for (let dy = -r; dy <= r; dy++) {
+    const w = Math.floor(Math.sqrt(r * r - dy * dy) + 0.5);
+    g.fillRect(Math.round(cx - w), Math.round(cy + dy), w * 2 + 1, 1);
+  }
+}
+const hx = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+const mix = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
+const css = (a, al = 1) => `rgba(${a[0]},${a[1]},${a[2]},${al})`;
+function rnd(seed) { let s = seed; return () => (s = (s * 16807) % 2147483647) / 2147483647; }
+
+// ---------- day / night ----------
+// t: 0 = sunrise, 0.5 = sunset, day = first 30 min, night = second 30 min
+const KEYS = [
+  [0.00, '#3b4a7a', '#f2a477', 0.45],
+  [0.06, '#5aa9e6', '#b4e1f7', 1],
+  [0.44, '#5aa9e6', '#b4e1f7', 1],
+  [0.50, '#4a3a78', '#f08a5d', 0.45],
+  [0.56, '#0b1030', '#1e2a5a', 0],
+  [0.94, '#0b1030', '#1e2a5a', 0],
+  [1.00, '#3b4a7a', '#f2a477', 0.45],
+];
+function sky(t) {
+  for (let i = 0; i < KEYS.length - 1; i++) {
+    const [a, at, ab, ad] = KEYS[i], [b, bt, bb, bd] = KEYS[i + 1];
+    if (t >= a && t <= b) {
+      const k = (t - a) / (b - a);
+      return { top: mix(hx(at), hx(bt), k), bot: mix(hx(ab), hx(bb), k), day: ad + (bd - ad) * k };
+    }
+  }
+  return { top: hx('#0b1030'), bot: hx('#1e2a5a'), day: 0 };
+}
+function clockStr(t) { // sunrise at 06:00
+  const mins = Math.floor(((t * 24 + 6) % 24) * 60);
+  return String(Math.floor(mins / 60)).padStart(2, '0') + ':' + String(mins % 60).padStart(2, '0');
+}
+
+// ---------- window / outside ----------
+const WX = 16, WY = 20, WW = 56, WH = 50;
+const stars = (() => { const r = rnd(7); return Array.from({ length: 22 }, () => [WX + r() * WW, WY + r() * (WH - 22), r()]); })();
+let particles = [];
+const SEASONS = ['Spring', 'Summer', 'Autumn', 'Winter'];
+
+function drawOutside(time, sk) {
+  const night = 1 - sk.day;
+  g.save(); g.beginPath(); g.rect(WX, WY, WW, WH); g.clip();
+  for (let y = 0; y < WH; y++) R(WX, WY + y, WW, 1, css(mix(sk.top, sk.bot, y / WH)));
+  // stars
+  for (const [x, y, p] of stars) {
+    const tw = 0.6 + 0.4 * Math.sin(time * 2 + p * 20);
+    if (night > 0.3) R(x, y, 1, 1, `rgba(255,255,230,${(night - 0.3) * tw})`);
+  }
+  // sun / moon
+  if (state.t < 0.5) {
+    const p = state.t / 0.5;
+    disc(WX + 4 + p * (WW - 8), WY + WH - 16 - Math.sin(Math.PI * p) * 26, 3, '#ffe27a');
+  } else {
+    const p = (state.t - 0.5) / 0.5, mx = WX + 4 + p * (WW - 8), my = WY + WH - 16 - Math.sin(Math.PI * p) * 26;
+    disc(mx, my, 3, '#f1efdc'); P(mx + 1, my - 1, '#d4d1bb'); P(mx - 1, my + 1, '#d4d1bb');
+  }
+  // clouds
+  if (state.season !== 3 || true) {
+    const ca = 0.25 + 0.65 * sk.day;
+    for (let i = 0; i < 2; i++) {
+      const cx = WX + ((time * (2 + i) + i * 31) % (WW + 30)) - 15, cy = WY + 8 + i * 9;
+      g.fillStyle = `rgba(255,255,255,${ca})`;
+      g.fillRect(Math.round(cx), cy, 12, 3); g.fillRect(Math.round(cx) + 3, cy - 2, 6, 2);
+    }
+  }
+  const gy = WY + WH - 10; // ground line
+  // houses across the street
+  const houses = [[WX - 2, 14, 13, '#8c5a4a', '#5e3b33'], [WX + 13, 12, 17, '#6f7d8c', '#4b5563'], [WX + 27, 16, 11, '#a7865c', '#6e573b'], [WX + 44, 14, 15, '#7a6a8f', '#4f4560']];
+  for (const [x, w, h, c, roof] of houses) {
+    R(x, gy - h, w, h, c);
+    R(x - 1, gy - h - 3, w + 2, 3, roof);
+    if (state.season === 3) R(x - 1, gy - h - 4, w + 2, 2, '#f4f7fb');
+  }
+  // ground: grass strip, sidewalk, road
+  const grass = ['#7cc96b', '#5aa64f', '#9a9a4a', '#eef3f8'][state.season];
+  R(WX, gy, WW, 2, grass);
+  R(WX, gy + 2, WW, 3, state.season === 3 ? '#dfe6ee' : '#b8b2a8');
+  R(WX, gy + 5, WW, 5, '#4a4a52');
+  for (let x = 0; x < WW; x += 8) R(WX + x + ((time * 0) | 0), gy + 7, 4, 1, '#d8c76a');
+  // street lamp
+  const lx = WX + 9;
+  R(lx, gy - 22, 1, 24, '#2d2d35'); R(lx - 1, gy - 23, 4, 2, '#2d2d35');
+  // tree
+  drawTree(WX + 40, gy, time);
+  // darkness
+  if (night > 0) { g.fillStyle = `rgba(10,14,40,${night * 0.55})`; g.fillRect(WX, WY + 22, WW, WH); }
+  // lit windows & lamp
+  if (night > 0.2) {
+    const lit = rnd(3);
+    for (const [x, w, h] of houses) for (let wy = gy - h + 3; wy < gy - 3; wy += 5) for (let wx = x + 2; wx < x + w - 2; wx += 4)
+      if (lit() > 0.45) R(wx, wy, 2, 2, `rgba(255,214,120,${night})`);
+    const grd = g.createRadialGradient(lx + 1, gy - 21, 0, lx + 1, gy - 21, 14);
+    grd.addColorStop(0, `rgba(255,220,140,${0.55 * night})`); grd.addColorStop(1, 'rgba(255,220,140,0)');
+    g.fillStyle = grd; g.fillRect(lx - 14, gy - 35, 30, 40);
+    R(lx, gy - 21, 2, 1, `rgba(255,236,170,${night})`);
+  } else { R(lx, gy - 21, 2, 1, '#9a9aa5'); }
+  // particles
+  updateParticles(time);
+  for (const p of particles) R(p.x, p.y, p.s, p.s, p.c);
+  g.restore();
+}
+
+function drawTree(x, gy, time) {
+  R(x - 1, gy - 18, 3, 18, '#5b3b26'); R(x, gy - 22, 1, 4, '#5b3b26');
+  R(x - 5, gy - 16, 4, 1, '#5b3b26'); R(x + 2, gy - 13, 5, 1, '#5b3b26');
+  const sway = Math.round(Math.sin(time * 0.8));
+  const cx = x + sway * 0, cy = gy - 26;
+  const r = rnd(11);
+  if (state.season === 3) {
+    // bare branches with snow
+    const br = [[0, -22, -9, -32], [0, -22, 8, -33], [0, -18, -11, -24], [1, -16, 11, -23], [0, -22, 1, -36], [-5, -28, -8, -35], [5, -29, 9, -36]];
+    for (const [x0, y0, x1, y1] of br) { line(x + x0, gy + y0, x + x1, gy + y1, '#5b3b26'); line(x + x0, gy + y0 - 1, x + x1, gy + y1 - 1, '#f4f7fb'); line(x + x0, gy + y0, x + x1, gy + y1, '#5b3b26'); }
+    for (const [, , x1, y1] of br) R(x + x1 - 1, gy + y1 - 1, 3, 1, '#f4f7fb');
+    return;
+  }
+  const pal = [['#6cbf5e', '#4f9e48', '#8fd47e'], ['#3f9e4d', '#2f7d3c', '#58b864'], ['#e07b39', '#c94f2c', '#f2b134'], []][state.season];
+  disc(cx, cy, 11, pal[1]); disc(cx - 6, cy + 3, 7, pal[1]); disc(cx + 6, cy + 3, 7, pal[1]);
+  disc(cx - 1, cy - 1, 9, pal[0]); disc(cx - 5, cy + 2, 5, pal[0]); disc(cx + 5, cy + 1, 5, pal[0]);
+  for (let i = 0; i < 26; i++) P(cx - 10 + r() * 20, cy - 9 + r() * 16, pal[2]);
+  if (state.season === 0) for (let i = 0; i < 18; i++) P(cx - 10 + r() * 20, cy - 9 + r() * 16, i % 2 ? '#f7b5cf' : '#fde2ec');
+}
+
+let lastPT = 0;
+function updateParticles(time) {
+  const dt = Math.min(0.1, time - lastPT); lastPT = time;
+  const spawnRate = [2, 0, 3, 10][state.season];
+  if (Math.random() < spawnRate * dt) {
+    const s = state.season;
+    particles.push({
+      x: s === 3 ? WX + Math.random() * WW : WX + 28 + Math.random() * 22, y: s === 3 ? WY - 2 : WY + 14 + Math.random() * 10,
+      vx: (Math.random() - 0.5) * 4 - (s === 3 ? 1 : 3), vy: s === 3 ? 6 + Math.random() * 4 : 5 + Math.random() * 3,
+      s: 1, c: s === 3 ? '#ffffff' : s === 0 ? '#f7b5cf' : ['#e07b39', '#c94f2c', '#f2b134'][Math.random() * 3 | 0], ph: Math.random() * 6,
+    });
+  }
+  for (const p of particles) { p.x += (p.vx + Math.sin(time * 3 + p.ph) * 3) * dt; p.y += p.vy * dt; }
+  particles = particles.filter(p => p.y < WY + WH - 7 && p.x > WX - 2);
+}
+
+// ---------- room ----------
+function drawRoomBack(time) {
+  // wall
+  R(0, 0, W, 104, '#d9c3a5');
+  for (let x = 4; x < W; x += 10) R(x, 0, 1, 104, '#d0b897');
+  R(0, 0, W, 3, '#c7ab86');
+  // floor
+  R(0, 104, W, H - 104, '#8b5a3c');
+  for (let y = 108, i = 0; y < H; y += 6, i++) {
+    R(0, y, W, 1, '#734a31');
+    for (let x = (i % 2) * 20; x < W; x += 40) R(x, y - 5, 1, 5, '#734a31');
+  }
+  R(0, 101, W, 4, '#efe3cf'); R(0, 104, W, 1, '#c9b89c');
+  // window frame
+  R(WX - 4, WY - 4, WW + 8, WH + 8, '#f4ede0');
+  R(WX - 4, WY + WH + 4, WW + 8, 1, '#b9ad98');
+  R(WX - 6, WY + WH + 2, WW + 12, 4, '#e8dcc6'); R(WX - 6, WY + WH + 6, WW + 12, 1, '#a99c86');
+  // curtains
+  for (const [cx, dir] of [[WX - 9, 1], [WX + WW + 3, -1]]) {
+    R(cx, WY - 7, 7, WH + 14, '#b5484a');
+    for (let y = WY - 7; y < WY + WH + 7; y += 1) if ((y % 6) < 2) P(cx + (dir > 0 ? 5 : 1), y, '#9a3a3d');
+  }
+  R(WX - 12, WY - 9, WW + 24, 2, '#6b4a33');
+  // rug
+  if (state.upgrades) {
+    g.fillStyle = '#3f6f8f'; ellipse(152, 132, 52, 10);
+    g.fillStyle = '#e8c76a'; ellipse(152, 132, 46, 8);
+    g.fillStyle = '#3f6f8f'; ellipse(152, 132, 40, 6.5);
+    g.fillStyle = '#5b8fb0'; ellipse(152, 132, 30, 4);
+  }
+  // shelf + books
+  R(206, 52, 30, 2, '#6b4a33'); R(208, 54, 2, 3, '#6b4a33'); R(232, 54, 2, 3, '#6b4a33');
+  const books = [['#c0392b', 9], ['#2e86ab', 11], ['#f2b134', 8], ['#5fbf77', 10], ['#8e5bb5', 9]];
+  let bx = 209; for (const [c, h] of books) { R(bx, 52 - h, 3, h, c); bx += 4; }
+  R(bx + 1, 46, 6, 6, '#7a8a6a'); R(bx + 2, 42, 4, 4, '#5aa64f');
+  // wall clock showing sim time
+  const ccx = 221, ccy = 26; disc(ccx, ccy, 8, '#3a3340'); disc(ccx, ccy, 7, '#f7f1e3');
+  const hrs = (state.t * 24 + 6) % 12, mins = ((state.t * 24 + 6) % 1) * 60;
+  line(ccx, ccy, ccx + Math.sin(hrs / 12 * 2 * Math.PI) * 4, ccy - Math.cos(hrs / 12 * 2 * Math.PI) * 4, '#3a3340');
+  line(ccx, ccy, ccx + Math.sin(mins / 60 * 2 * Math.PI) * 6, ccy - Math.cos(mins / 60 * 2 * Math.PI) * 6, '#c0392b');
+  // poster
+  if (state.upgrades) {
+    R(176, 12, 24, 32, '#26314a'); R(177, 13, 22, 30, '#2f3e60');
+    disc(188, 24, 5, '#f2b134'); R(180, 32, 16, 6, '#3a6b55'); R(183, 29, 10, 3, '#4f8a6e');
+    R(180, 39, 16, 2, '#e8d7b8');
+  }
+  // desk
+  R(88, 82, 124, 6, '#b9834f'); R(88, 82, 124, 1, '#cf9963');
+  R(88, 88, 124, 4, '#7a4e2c');
+  R(91, 92, 4, 28, '#6a4226'); R(205, 92, 4, 28, '#6a4226');
+  R(178, 92, 27, 22, '#8a5a35'); R(178, 92, 27, 1, '#6a4226'); R(178, 103, 27, 1, '#6a4226');
+  R(189, 97, 5, 1, '#d9c3a5'); R(189, 108, 5, 1, '#d9c3a5');
+  // monitor(s)
+  R(126, 48, 46, 32, '#24232d'); R(146, 80, 6, 3, '#24232d'); R(140, 82, 18, 1, '#1a1a22');
+  if (state.upgrades) { R(174, 52, 32, 26, '#24232d'); R(188, 78, 4, 4, '#24232d'); R(184, 81, 12, 1, '#1a1a22'); }
+  // keyboard
+  R(132, 83, 34, 3, '#c9c6cf'); R(132, 85, 34, 1, '#99969f');
+  // mug
+  const mx = state.upgrades ? 112 : 184;
+  R(mx, 76, 8, 8, '#e9e4da'); R(mx, 76, 8, 1, '#5a3420'); R(mx + 8, 78, 2, 1, '#e9e4da'); R(mx + 9, 78, 1, 4, '#e9e4da'); R(mx + 8, 81, 2, 1, '#e9e4da');
+  R(mx + 2, 79, 4, 3, '#c0392b');
+  // desk lamp
+  if (state.upgrades) {
+    R(96, 80, 10, 2, '#2d2d35'); line(100, 80, 96, 66, '#2d2d35'); line(96, 66, 104, 60, '#2d2d35');
+    R(102, 58, 8, 4, '#3f6f8f'); R(103, 62, 6, 1, '#ffe9a8');
+  }
+  // plant
+  R(70, 112, 12, 12, '#c26a3d'); R(69, 111, 14, 2, '#a85a32');
+  for (const [dx, dy, c] of [[-4, -8, '#4f9e48'], [3, -11, '#5aa64f'], [8, -7, '#4f9e48'], [1, -5, '#6cbf5e'], [-2, -12, '#6cbf5e']])
+    { line(76, 111, 76 + dx, 111 + dy, c); R(76 + dx - 1, 111 + dy - 1, 3, 2, c); }
+}
+
+function ellipse(cx, cy, rx, ry) { for (let dy = -ry; dy <= ry; dy++) { const w = Math.round(rx * Math.sqrt(1 - (dy / ry) ** 2)); g.fillRect(cx - w, Math.round(cy + dy), w * 2, 1); } }
+function line(x0, y0, x1, y1, c) {
+  const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)) | 0 || 1;
+  for (let i = 0; i <= n; i++) P(x0 + (x1 - x0) * i / n, y0 + (y1 - y0) * i / n, c);
+}
+
+// code on screen
+const codeLines = (() => { const r = rnd(42); return Array.from({ length: 64 }, () => { const ind = (r() * 3 | 0) * 3; const segs = []; let n = 1 + (r() * 3 | 0); while (n--) segs.push([2 + (r() * 9 | 0), ['#7fd1b9', '#f2b134', '#c792ea', '#82aaff', '#e9e4da'][r() * 5 | 0]]); return { ind, segs }; }); })();
+function drawScreens(time) {
+  const typing = state.studying && !state.paused;
+  R(128, 50, 42, 28, typing ? '#1b2440' : '#22304f');
+  if (typing || !state.studying) {
+    const scroll = Math.floor(time * (typing ? 1.2 : 0)) ;
+    const partial = typing ? (time * 1.2) % 1 : 1;
+    for (let i = 0; i < 8; i++) {
+      const L = codeLines[(scroll + i) % codeLines.length];
+      let x = 130 + L.ind; const last = i === 7;
+      let budget = last ? Math.floor(partial * 30) : 999;
+      for (const [w, c] of L.segs) { const ww = Math.min(w, budget); if (ww <= 0) break; R(x, 52 + i * 3, ww, 1, c); x += w + 2; budget -= w + 2; }
+      if (last && typing && (time * 3 | 0) % 2) R(x, 51 + i * 3, 1, 3, '#e9e4da');
+    }
+  }
+  if (state.upgrades) {
+    R(176, 54, 28, 22, '#1e3a32');
+    // little chart
+    for (let i = 0; i < 6; i++) { const h = 4 + ((i * 7 + 3) % 11); R(179 + i * 4, 73 - h, 3, h, i === 5 ? '#f2b134' : '#5fbf77'); }
+  }
+}
+
+function drawFront(time) {
+  const typing = state.studying && !state.paused;
+  const bob = typing ? Math.round(Math.sin(time * 9) * 0.5) : 0;
+  const armL = typing ? Math.round(Math.max(0, Math.sin(time * 14))) : 0;
+  const armR = typing ? Math.round(Math.max(0, Math.sin(time * 14 + Math.PI))) : 0;
+  // arms
+  R(132, 80 + armL, 6, 10, '#3d6aa3'); R(162, 80 + armR, 6, 10, '#3d6aa3');
+  // torso (hoodie)
+  R(136, 77, 28, 28, '#4a7fc1'); R(135, 79, 1, 24, '#4a7fc1'); R(164, 79, 1, 24, '#4a7fc1');
+  R(136, 77, 28, 1, '#5b90d2');
+  R(142, 75 + bob, 16, 6, '#3d6aa3'); R(144, 80 + bob, 12, 3, '#3d6aa3');
+  R(149, 83, 2, 14, '#3d6aa3');
+  // neck + head
+  R(147, 72 + bob, 6, 4, '#e8b48a');
+  disc(150, 66 + bob, 7, '#3b2a20');
+  R(142, 67 + bob, 2, 3, '#e8b48a'); R(157, 67 + bob, 2, 3, '#e8b48a');
+  for (let i = 0; i < 4; i++) P(146 + i * 3, 59 + bob, '#4e392c');
+  if (state.upgrades) { // beanie
+    disc(150, 62 + bob, 7, '#c0392b'); R(142, 63 + bob, 17, 3, '#a02f24'); R(143, 66 + bob, 15, 1, '#3b2a20');
+    disc(150, 54 + bob, 2, '#f3ead8');
+  }
+  // chair
+  R(138, 93, 24, 20, '#33343d'); R(139, 94, 22, 1, '#4a4b57'); R(138, 112, 24, 2, '#26272e');
+  R(148, 114, 4, 10, '#26272e'); R(136, 123, 28, 2, '#26272e');
+  R(135, 125, 3, 2, '#111'); R(162, 125, 3, 2, '#111'); R(149, 125, 3, 2, '#111');
+  // cat
+  if (state.upgrades) {
+    const cx = 196, cy = 132; g.fillStyle = '#e08a3c'; ellipse(cx, cy, 10, 4);
+    disc(cx - 9, cy - 3, 4, '#e08a3c'); R(cx - 13, cy - 8, 2, 2, '#e08a3c'); R(cx - 7, cy - 8, 2, 2, '#e08a3c');
+    R(cx - 11, cy - 3, 2, 1, '#3a2a20'); R(cx - 7, cy - 3, 2, 1, '#3a2a20');
+    for (let i = -6; i <= 6; i += 4) R(cx + i, cy - 3, 2, 1, '#c26f2a');
+    const tail = Math.round(Math.sin(time * 2) * 2);
+    R(cx + 9, cy + 1, 3, 2, '#e08a3c'); R(cx + 12, cy - 1 + tail, 2, 3, '#e08a3c');
+  }
+}
+
+function drawGlows(time, sk) {
+  const night = 1 - sk.day;
+  g.globalCompositeOperation = 'lighter';
+  let grd = g.createRadialGradient(149, 64, 2, 149, 64, 60);
+  grd.addColorStop(0, `rgba(90,130,220,${0.08 + 0.22 * night})`); grd.addColorStop(1, 'rgba(90,130,220,0)');
+  g.fillStyle = grd; g.fillRect(0, 0, W, H);
+  if (state.upgrades) {
+    grd = g.createRadialGradient(106, 66, 1, 106, 80, 46);
+    grd.addColorStop(0, `rgba(255,190,110,${0.08 + 0.32 * night})`); grd.addColorStop(1, 'rgba(255,190,110,0)');
+    g.fillStyle = grd; g.fillRect(0, 0, W, H);
+  }
+  // daylight spill on floor
+  if (sk.day > 0) {
+    g.fillStyle = `rgba(255,240,200,${0.10 * sk.day})`;
+    g.beginPath(); g.moveTo(WX, 106); g.lineTo(WX + WW, 106); g.lineTo(WX + WW + 30, H); g.lineTo(WX + 18, H); g.closePath(); g.fill();
+  }
+  g.globalCompositeOperation = 'source-over';
+  // steam
+  const mx = state.upgrades ? 112 : 184;
+  for (let i = 0; i < 3; i++) {
+    const k = ((time * 0.6 + i / 3) % 1);
+    P(mx + 3 + Math.round(Math.sin(time * 2 + i * 2) * 1.5), 74 - k * 10, `rgba(255,255,255,${0.5 * (1 - k)})`);
+  }
+}
+
+function render(time) {
+  const sk = sky(state.t);
+  const night = 1 - sk.day;
+  g = main; g.clearRect(0, 0, W, H);
+  drawRoomBack(time);
+  if (night > 0) { g.fillStyle = `rgba(14,18,52,${night * 0.55})`; g.fillRect(0, 0, W, H); }
+  drawOutside(time, sk);
+  drawScreens(time);
+  g = offG; g.clearRect(0, 0, W, H);
+  drawFront(time);
+  if (night > 0) { g.globalCompositeOperation = 'source-atop'; g.fillStyle = `rgba(14,18,52,${night * 0.55})`; g.fillRect(0, 0, W, H); g.globalCompositeOperation = 'source-over'; }
+  g = main; g.drawImage(off, 0, 0);
+  drawGlows(time, sk);
+}
+
+// ---------- loop & UI ----------
+const $ = id => document.getElementById(id);
+let last = performance.now();
+function fmt(s) { s = Math.floor(s); return [s / 3600 | 0, (s / 60 | 0) % 60, s % 60].map(v => String(v).padStart(2, '0')).join(':'); }
+function frame(now) {
+  const dt = (now - last) / 1000; last = now;
+  if (state.ff) { state.t = (state.t + dt / 20) % 1; $('tod').value = state.t * 1000; }
+  if (state.studying && !state.paused) { state.elapsed += dt; if (!state.ff) state.t = (state.t + dt / 3600) % 1; }
+  $('timer').textContent = fmt(state.elapsed);
+  $('todLbl').textContent = clockStr(state.t) + (state.t < 0.5 ? ' ☀️' : ' 🌙');
+  $('simbar').textContent = `Day 43 · ${SEASONS[state.season]} (day 3/10) · ${clockStr(state.t)}`;
+  render(now / 1000);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+$('tod').oninput = e => { state.t = e.target.value / 1000; state.ff = false; $('ffBtn').classList.remove('on'); };
+document.querySelectorAll('[data-s]').forEach(b => b.onclick = () => {
+  state.season = +b.dataset.s; particles = [];
+  document.querySelectorAll('[data-s]').forEach(x => x.classList.toggle('on', x === b));
+});
+$('ffBtn').onclick = () => { state.ff = !state.ff; $('ffBtn').classList.toggle('on', state.ff); };
+$('upBtn').onclick = () => { state.upgrades = !state.upgrades; $('upBtn').classList.toggle('on', state.upgrades); };
+$('startBtn').onclick = () => {
+  state.studying = true; state.paused = false;
+  $('startBtn').classList.add('hidden'); $('pauseBtn').classList.remove('hidden'); $('endBtn').classList.remove('hidden');
+  $('sub').textContent = 'Studying… next coin in 59:59';
+};
+$('pauseBtn').onclick = () => {
+  state.paused = !state.paused; $('pauseBtn').textContent = state.paused ? '▶ Resume' : '❚❚ Pause';
+  $('sub').textContent = state.paused ? 'Paused' : 'Studying…';
+};
+$('endBtn').onclick = () => {
+  state.studying = false; state.paused = false; state.elapsed = 0;
+  $('startBtn').classList.remove('hidden'); $('pauseBtn').classList.add('hidden'); $('endBtn').classList.add('hidden');
+  $('pauseBtn').textContent = '❚❚ Pause'; $('sub').textContent = 'Session saved! (preview only)';
+};
+// URL params for screenshots: ?t=0.2&s=1&u=1&study=1
+const q = new URLSearchParams(location.search);
+if (q.has('t')) state.t = +q.get('t');
+if (q.has('s')) document.querySelector(`[data-s="${q.get('s')}"]`).click();
+if (q.get('u') === '1') $('upBtn').click();
+if (q.get('study') === '1') $('startBtn').click();
+$('tod').value = state.t * 1000;
+</script>
+</body>
+</html>
